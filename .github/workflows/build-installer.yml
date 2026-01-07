@@ -113,7 +113,23 @@ jobs:
         
         # Create the ISS file with version replacement
         $issContent = Get-Content ".\DGScope.iss" -Raw
-        $issContent = $issContent -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"${{ steps.version.outputs.VERSION }}`""
+        $version = "${{ steps.version.outputs.VERSION }}"
+        
+        # Extract numeric version (e.g., 0.0.1 from 0.0.1-alpha2)
+        $numericVersion = $version -replace '-.*', ''
+        # Ensure 4 components (e.g., 0.0.1.0)
+        $versionParts = $numericVersion.Split('.')
+        while ($versionParts.Count -lt 4) {
+          $versionParts += '0'
+        }
+        $versionInfoVersion = $versionParts[0..3] -join '.'
+        
+        Write-Host "Version: $version"
+        Write-Host "VersionInfoVersion: $versionInfoVersion"
+        
+        # Replace versions
+        $issContent = $issContent -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
+        $issContent = $issContent -replace 'VersionInfoVersion=.*', "VersionInfoVersion=$versionInfoVersion"
         $issContent | Set-Content ".\DGScope_build.iss"
         
         Write-Host "Running ISCC.exe..."
@@ -144,7 +160,7 @@ jobs:
         # Copy EXE to release output
         $exeFile = Get-ChildItem ".\installer-output\*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($exeFile) {
-          $newName = "DGScope-Setup-v${{ steps.version.outputs.VERSION }}.exe"
+          $newName = "DGScope-Setup-v$version.exe"
           Copy-Item $exeFile.FullName ".\release-output\$newName"
           Write-Host "✓ Created: $newName"
         } else {
