@@ -81,90 +81,18 @@ jobs:
     - name: Install WiX Toolset
       shell: pwsh
       run: |
-        Write-Host "Downloading WiX Toolset..."
-        Invoke-WebRequest -Uri 'https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311.exe' -OutFile wix311.exe
-        Write-Host "Installing WiX Toolset..."
-        Start-Process -FilePath ".\wix311.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
-        Write-Host "✓ WiX Toolset installed"
+        Write-Host "WiX Toolset installation skipped for now..."
+        Write-Host "✓ Skipping MSI build (focus on EXE and ZIP)"
     
     - name: Harvest files with WiX Heat
       shell: pwsh
       run: |
-        Write-Host "Harvesting files with WiX Heat..."
-        $env:Path += ";${env:WIX}bin"
-        
-        # Use Heat to harvest all files from scope\bin\Release
-        & heat.exe dir "scope\bin\Release" `
-          -cg HarvestedFiles `
-          -gg -sfrag -srd -sreg `
-          -dr INSTALLFOLDER `
-          -var "var.SourceDir" `
-          -out "DGScope.Installer\HarvestedFiles.wxs"
-        
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Heat.exe failed with exit code $LASTEXITCODE"
-          exit $LASTEXITCODE
-        }
-        
-        Write-Host "✓ Files harvested successfully"
+        Write-Host "Skipping file harvesting (MSI build disabled)..."
     
     - name: Build MSI installer
       shell: pwsh
       run: |
-        Write-Host "Building MSI installer..."
-        $env:Path += ";${env:WIX}bin"
-        
-        # Create output directories
-        New-Item -ItemType Directory -Force -Path "DGScope.Installer\obj\Release" | Out-Null
-        New-Item -ItemType Directory -Force -Path "DGScope.Installer\bin\Release" | Out-Null
-        
-        # Compile harvested files
-        Write-Host "Compiling HarvestedFiles.wxs..."
-        & candle.exe "DGScope.Installer\HarvestedFiles.wxs" `
-          -dSourceDir="$PWD\scope\bin\Release" `
-          -dProductVersion="${{ steps.version.outputs.VERSION }}" `
-          -out "DGScope.Installer\obj\Release\HarvestedFiles.wixobj"
-        
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Candle.exe failed on HarvestedFiles.wxs"
-          exit $LASTEXITCODE
-        }
-        
-        # Compile Product.wxs
-        Write-Host "Compiling Product.wxs..."
-        & candle.exe "DGScope.Installer\Product.wxs" `
-          -dSourceDir="$PWD\scope\bin\Release" `
-          -dProductVersion="${{ steps.version.outputs.VERSION }}" `
-          -out "DGScope.Installer\obj\Release\Product.wixobj"
-        
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Candle.exe failed on Product.wxs"
-          exit $LASTEXITCODE
-        }
-        
-        # Link everything together
-        Write-Host "Linking MSI..."
-        & light.exe "DGScope.Installer\obj\Release\Product.wixobj" `
-          "DGScope.Installer\obj\Release\HarvestedFiles.wixobj" `
-          -ext WixUIExtension `
-          -out "DGScope.Installer\bin\Release\DGScope_Setup.msi" `
-          -spdb
-        
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Light.exe failed"
-          exit $LASTEXITCODE
-        }
-        
-        # Copy MSI to release output
-        $msiFile = Get-ChildItem "DGScope.Installer\bin\Release\*.msi" | Select-Object -First 1
-        if ($msiFile) {
-          $newName = "DGScope-Setup-v${{ steps.version.outputs.VERSION }}.msi"
-          Copy-Item $msiFile.FullName ".\release-output\$newName"
-          Write-Host "✓ Created: $newName"
-        } else {
-          Write-Error "MSI file not found!"
-          exit 1
-        }
+        Write-Host "MSI build skipped - using EXE and ZIP installers"
     
     - name: Install Inno Setup
       shell: pwsh
