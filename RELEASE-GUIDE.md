@@ -129,28 +129,31 @@ https://github.com/your-username/scope/releases/tag/v1.0.0
 
 ---
 
-## 🛠️ Local Testing Before Release
+## 🛠️ Testing Before Release
 
-Test the installers locally before pushing a tag:
+Test locally before creating a release:
 
-### Test All Installers:
 ```powershell
-.\build-installer-menu.bat
+# Build solution locally
+msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU"
+
+# Verify build output
+dir .\build\Release\
+
+# Test the executable
+.\build\Release\scope.exe
 ```
 
-### Individual Tests:
+For testing installers, you can build them manually (requires WiX/Inno Setup installed):
 ```powershell
-# Test Inno Setup (EXE)
-.\build-installer-inno.ps1 -Version "1.0.0-test"
+# MSI (requires WiX)
+msbuild DGScope.Installer\DGScope.Installer.wixproj /p:Configuration=Release
 
-# Test WiX (MSI)
-.\build-installer.ps1 -Version "1.0.0-test"
-
-# Test Portable ZIP
-.\build-portable.ps1 -Version "1.0.0-test"
+# EXE (requires Inno Setup)
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" DGScope.iss
 ```
 
-Install and test each one before creating the official release!
+**Recommended:** Just push a pre-release tag and let GitHub Actions build everything!
 
 ---
 

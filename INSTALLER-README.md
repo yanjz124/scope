@@ -1,209 +1,212 @@
 # DGScope Installer
 
-This folder contains multiple installer options for creating Windows installers for DGScope.
+This project uses automated GitHub Actions to build and release installers.
 
-## Quick Start - Choose Your Method
+## 🚀 Creating a Release
 
-### Method 1: Inno Setup (⭐ RECOMMENDED - Easiest)
-**Best for:** Quick setup, simple requirements, single EXE installer
-```powershell
-# 1. Install Inno Setup: https://jrsoftware.org/isinfo.php
-# 2. Run the build script:
-.\build-installer-inno.ps1
-# Output: installer-output\DGScope_Setup_1.0.0.exe
+Simply create and push a git tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-### Method 2: WiX Toolset (Professional MSI)
-**Best for:** Enterprise deployment, Group Policy, Windows Installer features
-```powershell
-# 1. Install WiX Toolset: https://github.com/wixtoolset/wix3/releases
-# 2. Run the build script:
-.\build-installer.ps1
-# Output: DGScope.Installer\bin\Release\DGScope_Setup.msi
-```
+GitHub Actions will automatically:
+- ✅ Build DGScope in Release mode
+- ✅ Create an EXE installer (Inno Setup)
+- ✅ Create an MSI installer (WiX Toolset)
+- ✅ Create a portable ZIP with all dependencies
+- ✅ Publish a GitHub Release with all files attached
 
-### Method 3: Portable ZIP (No installer needed)
-**Best for:** Quick distribution, no installation required, portable use
+See [RELEASE-GUIDE.md](RELEASE-GUIDE.md) for complete release instructions.
+
+---
+
+## 📦 What Gets Released
+
+Each release includes three download options:
+
+### 1️⃣ DGScope-Setup-v{version}.exe (Recommended)
+- Single-file installer built with Inno Setup
+- Best for end users
+- Includes installation wizard
+- Creates shortcuts automatically
+- ~25-50 MB
+
+### 2️⃣ DGScope-Setup-v{version}.msi
+- Windows Installer package built with WiX Toolset
+- Best for enterprise/IT deployment
+- Group Policy compatible
+- MSI format features
+- ~25-50 MB
+
+### 3️⃣ DGScope-Portable-v{version}.zip
+- No installation required
+- Extract and run `scope.exe`
+- Perfect for USB drives or testing
+- Includes all dependencies
+- ~30-60 MB
+
+---
+
+## 🔧 Manual Local Builds (Optional)
+
+If you need to test installers locally before releasing:
+
+### Prerequisites
+### Prerequisites
+
+For manual local builds only (not needed for GitHub releases):
+- [WiX Toolset v3.11+](https://github.com/wixtoolset/wix3/releases) for MSI
+- [Inno Setup](https://jrsoftware.org/isinfo.php) for EXE
+- Visual Studio 2017+ or MSBuild
+
+### Build Manually
+
 ```powershell
-.\build-portable.ps1
-# Output: portable-output\DGScope_Portable_v1.0.0.zip
+# Build solution
+msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU"
+
+# Build WiX MSI
+msbuild DGScope.Installer\DGScope.Installer.wixproj /p:Configuration=Release
+
+# Build Inno Setup EXE (modify version in DGScope.iss first)
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" DGScope.iss
+
+# Create Portable ZIP
+Compress-Archive -Path ".\build\Release\*" -DestinationPath "DGScope-Portable.zip"
 ```
 
 ---
 
-## Detailed Instructions
+## 📁 Project Structure
 
-## Prerequisites
+```
+DGScope.Installer/
+├── DGScope.Installer.wixproj   # WiX project file
+└── Product.wxs                  # WiX installer definition
 
-### Option 1: WiX Toolset (Recommended)
-1. Download and install [WiX Toolset v3.11.2](https://github.com/wixtoolset/wix3/releases/tag/wix3112rtm) or later
-2. Install Visual Studio 2017 or later with .NET desktop development workload
-3. Optionally install the [WiX Toolset Visual Studio Extension](https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2019Extension)
+DGScope.iss                      # Inno Setup script
 
-### Option 2: Advanced Installer (Commercial Alternative)
-If you prefer a GUI-based approach, you can use [Advanced Installer](https://www.advancedinstaller.com/) which has a free edition.
-
-### Option 3: Inno Setup (Free Alternative)
-[Inno Setup](https://jrsoftware.org/isinfo.php) is another free option that's simpler but still professional.
-
-## Building the Installer
-
-### Using PowerShell Script (Easiest)
-```powershell
-.\build-installer.ps1
+.github/workflows/
+└── build-installer.yml          # Automated build workflow
 ```
 
-This will:
-1. Build the solution in Release mode
-2. Create the MSI installer
-3. Output to `DGScope.Installer\bin\Release\DGScope_Setup.msi`
+---
 
-### Custom Version Number
-```powershell
-.\build-installer.ps1 -Version "1.2.3.4"
-```
+## 🎨 Customization
 
-### Manual Build
-```batch
-msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Rebuild
-msbuild DGScope.Installer\DGScope.Installer.wixproj /p:Configuration=Release
-```
+### Change Product Information
 
-## Installer Features
+Edit [DGScope.Installer/Product.wxs](DGScope.Installer/Product.wxs):
+- `ProductName` - Application name
+- `Manufacturer` - Company/developer name
+- **DO NOT CHANGE** `UpgradeCode` after first release
 
-The generated installer includes:
-- ✅ Complete application with all dependencies
-- ✅ Start Menu shortcut
-- ✅ Desktop shortcut
-- ✅ Proper uninstall support
-- ✅ Upgrade support (newer versions replace older ones)
-- ✅ Optional "Launch after install"
-- ✅ Professional MSI package format
-
-## Customization
-
-### Change Install Location
-Edit `Product.wxs` and modify the `INSTALLFOLDER` directory name.
+Edit [DGScope.iss](DGScope.iss):
+- `MyAppName` - Application name
+- `MyAppPublisher` - Company/developer name
+- `MyAppURL` - Website/repository URL
 
 ### Add Application Icon
-1. Add your icon file (e.g., `AppIcon.ico`)
-2. Uncomment the icon lines in `Product.wxs`:
-   ```xml
-   <Icon Id="icon.ico" SourceFile="$(var.SolutionDir)\scope\Resources\AppIcon.ico"/>
-   <Property Id="ARPPRODUCTICON" Value="icon.ico" />
-   ```
+
+1. Add icon file: `scope\Resources\AppIcon.ico`
+2. Uncomment icon lines in:
+   - `Product.wxs` (WiX)
+   - `DGScope.iss` (Inno Setup)
 
 ### Include Additional Files
-Edit the `ProductComponents` ComponentGroup in `Product.wxs` to add more files or folders.
 
-### Modify Product Information
-Edit the PropertyGroup defines at the top of `Product.wxs`:
-- `ProductVersion` - Version number
-- `ProductName` - Display name
-- `Manufacturer` - Company/developer name
-- `UpgradeCode` - **DO NOT CHANGE** after first release (ensures upgrades work)
+**WiX:** Edit `Product.wxs`, add to `ProductComponents` group
+**Inno Setup:** Edit `DGScope.iss`, add to `[Files]` section
 
-## Distribution
+---
 
-The generated `.msi` file can be:
-1. Distributed directly to users
-2. Uploaded to a website for download
-3. Included in a GitHub Release
-4. Deployed via Group Policy or SCCM in enterprise environments
+## 🤖 GitHub Actions Workflow
 
-## Automated Builds with GitHub Actions
+The workflow in [.github/workflows/build-installer.yml](.github/workflows/build-installer.yml):
 
-To automatically build installers on every release:
+**Triggers:**
+- Any tag starting with `v` (e.g., `v1.0.0`, `v2.1.3-beta`)
+- Manual dispatch from Actions tab
 
-1. Add the WiX binaries to your repository, OR
-2. Use the GitHub Actions workflow below:
+**What it does:**
+1. Checks out code
+2. Restores NuGet packages
+3. Builds solution in Release mode
+4. Creates portable ZIP with all dependencies
+5. Installs WiX Toolset
+6. Builds MSI installer
+7. Installs Inno Setup  
+8. Builds EXE installer
+9. Generates release notes
+10. Creates GitHub Release with all files attached
 
-```yaml
-name: Build Installer
+**Runtime:** ~5-10 minutes
 
-on:
-  push:
-    tags:
-      - 'v*'
-  release:
-    types: [published]
+---
 
-jobs:
-  build:
-    runs-on: windows-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '4.7.2'
-    
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1
-    
-    - name: Install WiX Toolset
-      run: |
-        Invoke-WebRequest -Uri 'https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311.exe' -OutFile wix311.exe
-        .\wix311.exe /install /quiet /norestart
-    
-    - name: Build Installer
-      run: .\build-installer.ps1 -Version ${{ github.ref_name }}
-    
-    - name: Upload Installer
-      uses: actions/upload-artifact@v3
-      with:
-        name: DGScope-Installer
-        path: DGScope.Installer\bin\Release\*.msi
-```
+## 📊 Release Versioning
 
-## Alternative: Inno Setup Script
+Use semantic versioning: `MAJOR.MINOR.PATCH[-PRERELEASE]`
 
-If you prefer Inno Setup (no WiX dependency), create `DGScope.iss`:
+Examples:
+- `v0.0.1-alpha1` - Alpha release
+- `v0.1.0-beta1` - Beta release
+- `v1.0.0` - First stable release
+- `v1.0.1` - Bug fix
+- `v1.1.0` - New features
+- `v2.0.0` - Breaking changes
 
-```pascal
-[Setup]
-AppName=DGScope
-AppVersion=1.0.0
-DefaultDirName={pf}\DGScope
-DefaultGroupName=DGScope
-OutputDir=output
-OutputBaseFilename=DGScope_Setup
-Compression=lzma2
-SolidCompression=yes
+---
 
-[Files]
-Source: "build\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+## 🆘 Troubleshooting
 
-[Icons]
-Name: "{group}\DGScope"; Filename: "{app}\scope.exe"
-Name: "{autodesktop}\DGScope"; Filename: "{app}\scope.exe"
+### Release not created on GitHub
+- Ensure tag starts with `v` (e.g., `v1.0.0`)
+- Check Actions tab for build errors
+- Verify GitHub Actions is enabled for your repo
 
-[Run]
-Filename: "{app}\scope.exe"; Description: "Launch DGScope"; Flags: nowait postinstall skipifsilent
-```
+### Build fails in GitHub Actions
+- Check Actions logs for specific error
+- Common issues:
+  - NuGet package restore failure
+  - Compilation errors
+  - Missing dependencies
 
-Then compile with:
-```batch
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" DGScope.iss
-```
+### Missing files in installers
+- Ensure all dependencies are in `build\Release\`
+- Update installer configurations to include new files
+- Check that project references have "Copy Local = True"
 
-## Troubleshooting
+---
 
-### "WiX Toolset not found"
-Install WiX from https://github.com/wixtoolset/wix3/releases
+## 📚 Additional Documentation
 
-### "Build failed" errors
-1. Make sure the solution builds successfully first
-2. Check that Release build output is in `build\Release\`
-3. Verify all file paths in `Product.wxs` are correct
+- **[RELEASE-GUIDE.md](RELEASE-GUIDE.md)** - Complete guide to creating releases
+- **[INSTALLER-QUICKSTART.md](INSTALLER-QUICKSTART.md)** - Quick reference
 
-### Missing DLLs in installer
-Check the `build\Release\` folder and add any missing files to the `Dependencies` component in `Product.wxs`.
+---
 
-## Support
+## ✅ Installation Features
 
-For issues specific to the installer, check:
-- [WiX Toolset Documentation](https://wixtoolset.org/documentation/)
-- [WiX Tutorial](https://www.firegiant.com/wix/tutorial/)
+All installers include:
+- Complete application with all DLLs
+- Configuration files
+- Start Menu shortcuts
+- Optional Desktop shortcut
+- Proper uninstall support (MSI/EXE)
+- Upgrade support (newer versions replace older)
+- .NET Framework 4.7.2 requirement check (Inno Setup)
+
+---
+
+## 🎯 Recommended for Users
+
+**Most users:** Download the `.exe` installer (Inno Setup)
+**IT/Enterprise:** Use the `.msi` installer (WiX)
+**Portable/Testing:** Use the `.zip` package
+
+---
+
+For questions or issues, see the [GitHub repository](https://github.com/yanjz124/scope).

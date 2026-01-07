@@ -1,73 +1,34 @@
 # DGScope Installer Setup - Quick Reference
 
-## ✅ What's Been Created
+## ✅ Release via GitHub Actions (Automated)
 
-I've set up **three different installer options** for DGScope:
+The easiest way to create a release with installers:
 
-### 1️⃣ WiX Toolset (MSI Installer)
-- **Files:**
-  - `DGScope.Installer/` - WiX project files
-  - `build-installer.ps1` - Build script
-- **Output:** `DGScope_Setup.msi`
-- **Best for:** Enterprise deployment, professional distribution
+```bash
+# 1. Create a version tag
+git tag v1.0.0
 
-### 2️⃣ Inno Setup (EXE Installer)  
-- **Files:**
-  - `DGScope.iss` - Inno Setup script
-  - `build-installer-inno.ps1` - Build script
-- **Output:** `DGScope_Setup_1.0.0.exe`
-- **Best for:** Easy setup, single-file installer (RECOMMENDED)
+# 2. Push the tag
+git push origin v1.0.0
 
-### 3️⃣ Portable ZIP
-- **Files:**
-  - `build-portable.ps1` - Build script
-- **Output:** `DGScope_Portable_v1.0.0.zip`
-- **Best for:** No installation needed, extract and run
-
----
-
-## 🚀 Quick Start
-
-### Choose ONE method:
-
-#### **Option A: Inno Setup (Easiest)** ⭐
-```powershell
-# 1. Download and install Inno Setup:
-# https://jrsoftware.org/isinfo.php
-
-# 2. Run this command:
-.\build-installer-inno.ps1
-
-# 3. Get your installer:
-# installer-output\DGScope_Setup_1.0.0.exe
+# 3. Done! GitHub Actions builds everything automatically
 ```
 
-#### **Option B: WiX Toolset (Professional)**
-```powershell
-# 1. Download and install WiX v3.11+:
-# https://github.com/wixtoolset/wix3/releases/tag/wix3112rtm
+In 5-10 minutes, your release will be live with:
+- ✅ DGScope-Setup-v1.0.0.exe (Inno Setup installer)
+- ✅ DGScope-Setup-v1.0.0.msi (WiX MSI installer)
+- ✅ DGScope-Portable-v1.0.0.zip (All dependencies)
 
-# 2. Run this command:
-.\build-installer.ps1
+Check progress at: `GitHub repo → Actions tab`
+Download from: `GitHub repo → Releases section`
 
-# 3. Get your installer:
-# DGScope.Installer\bin\Release\DGScope_Setup.msi
-```
-
-#### **Option C: Portable ZIP (No installer)**
-```powershell
-# Just run:
-.\build-portable.ps1
-
-# Get your ZIP:
-# portable-output\DGScope_Portable_v1.0.0.zip
-```
+See [RELEASE-GUIDE.md](RELEASE-GUIDE.md) for detailed instructions.
 
 ---
 
 ## 📦 What Users Get
 
-All installers include:
+All releases include three download options:
 - ✅ DGScope executable (`scope.exe`)
 - ✅ All required DLLs and dependencies
 - ✅ Configuration files
@@ -77,106 +38,109 @@ All installers include:
 
 ---
 
-## 🔧 Customization
+## 🔧 Version Numbering
 
-### Change Version Number
-```powershell
-# Inno Setup:
-.\build-installer-inno.ps1 -Version "2.0.1"
+```bash
+# Stable releases
+git tag v1.0.0
 
-# WiX:
-.\build-installer.ps1 -Version "2.0.1"
-
-# Portable:
-.\build-portable.ps1 -Version "2.0.1"
+# Pre-releases
+git tag v0.0.1-alpha1
+git tag v1.0.0-beta2
+git tag v2.0.0-rc1
 ```
 
-### Add Your Logo/Icon
-1. Place your icon file at: `scope\Resources\AppIcon.ico`
-2. Uncomment the icon lines in:
-   - `DGScope.Installer\Product.wxs` (for WiX)
-   - `DGScope.iss` already references it (for Inno Setup)
+---
 
-### Include Additional Files
-Edit the respective installer file:
-- **WiX:** Add files in `Product.wxs` under `<ComponentGroup Id="ProductComponents">`
-- **Inno Setup:** Add to `[Files]` section in `DGScope.iss`
+## 🤖 What GitHub Actions Does
+
+When you push a tag starting with `v`:
+
+1. ✅ Builds solution in Release mode
+2. ✅ Creates portable ZIP with all files
+3. ✅ Builds MSI installer (WiX)
+4. ✅ Builds EXE installer (Inno Setup)
+5. ✅ Generates release notes
+6. ✅ Creates GitHub Release
+7. ✅ Uploads all files automatically
+
+**No local tooling needed!** Everything happens in the cloud.
 
 ---
 
-## 🤖 Automated GitHub Builds
+## 🛠️ Manual Local Builds (Optional)
 
-A GitHub Actions workflow has been created at:
-`.github\workflows\build-installer.yml`
+Only if you want to test locally before releasing:
 
-### How to use:
-1. Push a tag: `git tag v1.0.0 && git push origin v1.0.0`
-2. GitHub automatically builds both MSI and EXE installers
-3. Installers are attached to the GitHub Release
-
-Or manually trigger from GitHub Actions tab.
-
----
-
-## 📝 Important Notes
-
-### First-Time Setup
-- **WiX users:** After installing WiX, restart Visual Studio
-- **Inno Setup users:** Default install path is `C:\Program Files (x86)\Inno Setup 6\`
-
-### .NET Framework Requirement
-- DGScope requires .NET Framework 4.7.2 or later
-- Inno Setup installer checks this automatically
-- Consider including .NET installer for users who don't have it
-
-### Build Output Location
-Make sure you have a successful Release build before running installer scripts:
+### Build Portable ZIP
 ```powershell
 msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU"
+Compress-Archive -Path ".\build\Release\*" -DestinationPath "DGScope-Portable.zip"
 ```
 
-The release binaries should be in: `build\Release\`
+### Build MSI (requires WiX)
+```powershell
+msbuild DGScope.Installer\DGScope.Installer.wixproj /p:Configuration=Release
+```
+
+### Build EXE (requires Inno Setup)
+```powershell
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" DGScope.iss
+```
+
+**Note:** For releases, just use GitHub Actions instead!
+
+---
+
+## 📝 Customization
+
+### Change Version Number
+```bash
+git tag v2.0.1
+git push origin v2.0.1
+```
+
+### Change Product Info
+
+**WiX (MSI):** Edit `DGScope.Installer/Product.wxs`
+**Inno Setup (EXE):** Edit `DGScope.iss`
 
 ---
 
 ## 🆘 Troubleshooting
 
-### "WiX Toolset not found"
-- Install from: https://github.com/wixtoolset/wix3/releases
-- Make sure `%WIX%` environment variable is set
-- Restart PowerShell/VS after install
+### Release not created
+- Ensure tag starts with `v` (e.g., `v1.0.0`)
+- Check GitHub → Actions tab for errors
+- Verify repo has Actions enabled
 
-### "Inno Setup not found"
-- Install from: https://jrsoftware.org/isinfo.php
-- Default path: `C:\Program Files (x86)\Inno Setup 6\`
-
-### "Build failed"
-- Check that solution builds successfully first
-- Verify `build\Release\scope.exe` exists
-- Look for NuGet package restoration issues
-
-### Missing DLLs in installer
-- Check `build\Release\` folder for all required files
-- Add missing files to the installer configuration
-- Ensure all project references are set to "Copy Local = True"
+### Build failed in Actions
+- Check Actions logs for details
+- Common: NuGet restore or compile errors
+- Fix locally, commit, and re-tag
 
 ---
 
-## 📚 More Information
+## 📚 More Info
 
-See `INSTALLER-README.md` for detailed documentation.
+- **[RELEASE-GUIDE.md](RELEASE-GUIDE.md)** - Complete release guide
+- **[INSTALLER-README.md](INSTALLER-README.md)** - Technical details
+- **GitHub Actions:** `.github/workflows/build-installer.yml`
 
-## 🎯 Recommended Approach
+---
 
-For most users, **Inno Setup** is the best choice:
-- ✅ Free and open source
-- ✅ Simple to set up
-- ✅ Single EXE file (easier to distribute)
-- ✅ Professional looking installer
-- ✅ Checks .NET Framework automatically
+## 🎯 Quick Reference
 
-WiX is better if you need:
-- Enterprise deployment features
-- MSI format requirement
-- Windows Installer database features
-- Group Policy deployment
+```bash
+# Create release
+git tag v1.0.0 && git push origin v1.0.0
+
+# View tags
+git tag -l
+
+# Delete tag (if mistake)
+git tag -d v1.0.0
+git push origin :refs/tags/v1.0.0
+```
+
+**That's it! GitHub handles the rest.** 🚀
