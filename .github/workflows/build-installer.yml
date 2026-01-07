@@ -198,9 +198,21 @@ jobs:
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "Release Files Created:" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
-        Get-ChildItem ".\release-output\" | ForEach-Object {
-          $size = [math]::Round($_.Length / 1MB, 2)
-          Write-Host "  $($_.Name) ($size MB)" -ForegroundColor Green
+        
+        if (Test-Path ".\release-output\") {
+          $files = Get-ChildItem ".\release-output\" -File
+          if ($files.Count -gt 0) {
+            foreach ($file in $files) {
+              $size = [math]::Round($file.Length / 1MB, 2)
+              Write-Host "  $($file.Name) ($size MB)" -ForegroundColor Green
+            }
+          } else {
+            Write-Error "No files found in release-output directory!"
+            exit 1
+          }
+        } else {
+          Write-Error "release-output directory does not exist!"
+          exit 1
         }
         Write-Host ""
     
@@ -248,6 +260,36 @@ jobs:
         
         $releaseNotes | Out-File -FilePath ".\release-output\RELEASE_NOTES.md" -Encoding UTF8
         Write-Host "✓ Release notes generated"
+    
+    - name: Verify release files before upload
+      shell: pwsh
+      run: |
+        Write-Host "Verifying all expected files exist..."
+        $version = "${{ steps.version.outputs.VERSION }}"
+        $expectedFiles = @(
+          "DGScope-Setup-v$version.exe",
+          "DGScope-Setup-v$version.msi",
+          "DGScope-Portable-v$version.zip",
+          "RELEASE_NOTES.md"
+        )
+        
+        $allExist = $true
+        foreach ($file in $expectedFiles) {
+          $path = ".\release-output\$file"
+          if (Test-Path $path) {
+            Write-Host "✓ Found: $file" -ForegroundColor Green
+          } else {
+            Write-Host "✗ Missing: $file" -ForegroundColor Red
+            $allExist = $false
+          }
+        }
+        
+        if (-not $allExist) {
+          Write-Error "Some expected files are missing!"
+          exit 1
+        }
+        
+        Write-Host "✓ All files verified" -ForegroundColor Green
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
