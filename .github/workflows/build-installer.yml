@@ -105,18 +105,51 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Building EXE installer..."
+        
+        # Verify release-output directory exists
+        if (-not (Test-Path ".\release-output")) {
+          New-Item -ItemType Directory -Force -Path ".\release-output" | Out-Null
+        }
+        
+        # Create the ISS file with version replacement
         $issContent = Get-Content ".\DGScope.iss" -Raw
         $issContent = $issContent -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"${{ steps.version.outputs.VERSION }}`""
         $issContent | Set-Content ".\DGScope_build.iss"
         
+        Write-Host "Running ISCC.exe..."
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ".\DGScope_build.iss"
+        $exitCode = $LASTEXITCODE
+        
+        if ($exitCode -ne 0) {
+          Write-Error "ISCC.exe failed with exit code: $exitCode"
+          Write-Host "Listing installer-output directory:"
+          Get-ChildItem ".\installer-output\" -Force 2>/dev/null | ForEach-Object { Write-Host "  $_" }
+          exit $exitCode
+        }
+        
+        Write-Host "ISCC.exe completed successfully"
+        
+        # Verify output was created
+        Write-Host "Listing installer-output directory:"
+        $files = Get-ChildItem ".\installer-output\" -File -ErrorAction SilentlyContinue
+        if ($files) {
+          foreach ($file in $files) {
+            Write-Host "  Found: $($file.Name)"
+          }
+        } else {
+          Write-Error "No files found in installer-output directory!"
+          exit 1
+        }
         
         # Copy EXE to release output
-        $exeFile = Get-ChildItem "installer-output\*.exe" | Select-Object -First 1
+        $exeFile = Get-ChildItem ".\installer-output\*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($exeFile) {
           $newName = "DGScope-Setup-v${{ steps.version.outputs.VERSION }}.exe"
           Copy-Item $exeFile.FullName ".\release-output\$newName"
           Write-Host "✓ Created: $newName"
+        } else {
+          Write-Error "No EXE file found in installer-output directory!"
+          exit 1
         }
     
     - name: List release files
