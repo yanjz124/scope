@@ -36,6 +36,10 @@ WizardStyle=modern
 ; Request admin privileges to install in Program Files
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64
+VersionInfoVersion={#MyAppVersion}
+VersionInfoCompanyName={#MyAppPublisher}
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
