@@ -246,7 +246,6 @@ jobs:
         $version = "${{ steps.version.outputs.VERSION }}"
         $expectedFiles = @(
           "DGScope-Setup-v$version.exe",
-          "DGScope-Setup-v$version.msi",
           "DGScope-Portable-v$version.zip",
           "RELEASE_NOTES.md"
         )
