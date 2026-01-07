@@ -114,15 +114,37 @@ jobs:
         Write-Host "Building MSI installer..."
         $env:Path += ";${env:WIX}bin"
         
-        # Build with MSBuild, passing SourceDir variable
-        msbuild DGScope.Installer\DGScope.Installer.wixproj `
-          /p:Configuration=Release `
-          /p:ProductVersion=${{ steps.version.outputs.VERSION }} `
-          /p:DefineConstants="SourceDir=$PWD\build\Release" `
-          /v:minimal
+        # Compile harvested files
+        & candle.exe "DGScope.Installer\HarvestedFiles.wxs" `
+          -dSourceDir="$PWD\build\Release" `
+          -dProductVersion="${{ steps.version.outputs.VERSION }}" `
+          -out "DGScope.Installer\obj\Release\"
         
         if ($LASTEXITCODE -ne 0) {
-          Write-Error "MSBuild failed with exit code $LASTEXITCODE"
+          Write-Error "Candle.exe failed on HarvestedFiles.wxs"
+          exit $LASTEXITCODE
+        }
+        
+        # Compile Product.wxs
+        & candle.exe "DGScope.Installer\Product.wxs" `
+          -dSourceDir="$PWD\build\Release" `
+          -dProductVersion="${{ steps.version.outputs.VERSION }}" `
+          -out "DGScope.Installer\obj\Release\"
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Candle.exe failed on Product.wxs"
+          exit $LASTEXITCODE
+        }
+        
+        # Link everything together
+        & light.exe "DGScope.Installer\obj\Release\Product.wixobj" `
+          "DGScope.Installer\obj\Release\HarvestedFiles.wixobj" `
+          -ext WixUIExtension `
+          -out "DGScope.Installer\bin\Release\DGScope_Setup.msi" `
+          -spdb
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Light.exe failed"
           exit $LASTEXITCODE
         }
         
