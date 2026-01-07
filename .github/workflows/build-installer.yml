@@ -87,12 +87,44 @@ jobs:
         Start-Process -FilePath ".\wix311.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
         Write-Host "✓ WiX Toolset installed"
     
+    - name: Harvest files with WiX Heat
+      shell: pwsh
+      run: |
+        Write-Host "Harvesting files with WiX Heat..."
+        $env:Path += ";${env:WIX}bin"
+        
+        # Use Heat to harvest all files from build\Release
+        & heat.exe dir "build\Release" `
+          -cg HarvestedFiles `
+          -gg -sfrag -srd -sreg `
+          -dr INSTALLFOLDER `
+          -var "var.SourceDir" `
+          -out "DGScope.Installer\HarvestedFiles.wxs"
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Heat.exe failed with exit code $LASTEXITCODE"
+          exit $LASTEXITCODE
+        }
+        
+        Write-Host "✓ Files harvested successfully"
+    
     - name: Build MSI installer
       shell: pwsh
       run: |
         Write-Host "Building MSI installer..."
         $env:Path += ";${env:WIX}bin"
-        msbuild DGScope.Installer\DGScope.Installer.wixproj /p:Configuration=Release /p:ProductVersion=${{ steps.version.outputs.VERSION }} /v:minimal
+        
+        # Build with MSBuild, passing SourceDir variable
+        msbuild DGScope.Installer\DGScope.Installer.wixproj `
+          /p:Configuration=Release `
+          /p:ProductVersion=${{ steps.version.outputs.VERSION }} `
+          /p:DefineConstants="SourceDir=$PWD\build\Release" `
+          /v:minimal
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "MSBuild failed with exit code $LASTEXITCODE"
+          exit $LASTEXITCODE
+        }
         
         # Copy MSI to release output
         $msiFile = Get-ChildItem "DGScope.Installer\bin\Release\*.msi" | Select-Object -First 1
@@ -100,6 +132,9 @@ jobs:
           $newName = "DGScope-Setup-v${{ steps.version.outputs.VERSION }}.msi"
           Copy-Item $msiFile.FullName ".\release-output\$newName"
           Write-Host "✓ Created: $newName"
+        } else {
+          Write-Error "MSI file not found!"
+          exit 1
         }
     
     - name: Install Inno Setup

@@ -352,6 +352,7 @@ healthchecksdb
 # Installer build outputs
 DGScope.Installer/bin/
 DGScope.Installer/obj/
+DGScope.Installer/HarvestedFiles.wxs
 installer-output/
 portable-output/
 release-output/

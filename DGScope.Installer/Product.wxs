@@ -86,26 +86,10 @@
     </DirectoryRef>
   </Fragment>
 
-  <!-- Files to install -->
+  <!-- Files to install - harvested by WiX Heat -->
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <!-- Main executable -->
-      <Component Id="MainExecutable" Guid="12345678-1234-1234-1234-123456789015">
-        <File Id="scope.exe" Source="$(var.SolutionDir)\build\Release\scope.exe" KeyPath="yes" />
-      </Component>
-      
-      <!-- All DLL dependencies -->
-      <Component Id="Dependencies" Guid="12345678-1234-1234-1234-123456789016">
-        <File Source="$(var.SolutionDir)\build\Release\*.dll" />
-        <File Source="$(var.SolutionDir)\build\Release\*.config" />
-      </Component>
-      
-      <!-- Additional resource files if needed -->
-      <!-- Uncomment and adjust as needed
-      <Component Id="Resources" Guid="12345678-1234-1234-1234-123456789017">
-        <File Source="$(var.SolutionDir)\build\Release\Resources\*.*" />
-      </Component>
-      -->
+      <ComponentGroupRef Id="HarvestedFiles" />
     </ComponentGroup>
   </Fragment>
 </Wix>
