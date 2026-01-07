@@ -127,9 +127,10 @@ jobs:
         Write-Host "Version: $version"
         Write-Host "VersionInfoVersion: $versionInfoVersion"
         
-        # Replace versions
+        # Replace versions - use numeric version for VersionInfo fields
         $issContent = $issContent -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
         $issContent = $issContent -replace 'VersionInfoVersion=.*', "VersionInfoVersion=$versionInfoVersion"
+        $issContent = $issContent -replace 'VersionInfoProductVersion=.*', "VersionInfoProductVersion=$versionInfoVersion"
         $issContent | Set-Content ".\DGScope_build.iss"
         
         Write-Host "Running ISCC.exe..."
