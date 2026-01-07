@@ -55,6 +55,36 @@ jobs:
     - name: Build solution (Release)
       run: msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Rebuild /v:minimal
     
+    - name: Copy receiver plugins into Release output
+      shell: pwsh
+      run: |
+        $destination = ".\scope\bin\Release"
+        if (-not (Test-Path $destination)) {
+          New-Item -ItemType Directory -Path $destination | Out-Null
+        }
+
+        Write-Host "Copying receiver and decoder assemblies into $destination"
+
+        $patterns = @(
+          ".\DGScope.Receivers.*\bin\Release\**\DGScope.Receivers.*.dll",
+          ".\NexradDecoder\bin\Release\**\NexradDecoder.dll"
+        )
+
+        foreach ($pattern in $patterns) {
+          Get-ChildItem -Path $pattern -File -Recurse -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              Copy-Item $_.FullName $destination -Force
+              Write-Host "  ✓ Copied $($_.Name)"
+            }
+        }
+
+        # Fail early if we did not copy anything
+        $copied = Get-ChildItem $destination -Filter "DGScope.*.dll" -File | Measure-Object
+        if ($copied.Count -eq 0) {
+          Write-Error "No receiver assemblies were copied."
+          exit 1
+        }
+
     - name: Create Portable ZIP
       shell: pwsh
       run: |
