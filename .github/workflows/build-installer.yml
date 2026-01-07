@@ -66,9 +66,9 @@ jobs:
         # Create output directory
         New-Item -ItemType Directory -Force -Path ".\release-output" | Out-Null
         
-        # Create ZIP from Release build
+        # Create ZIP from Release build (main exe is in scope\bin\Release)
         $zipPath = ".\release-output\$zipFileName"
-        Compress-Archive -Path ".\build\Release\*" -DestinationPath $zipPath -CompressionLevel Optimal
+        Compress-Archive -Path ".\scope\bin\Release\*" -DestinationPath $zipPath -CompressionLevel Optimal
         
         Write-Host "✓ Created: $zipPath"
         
@@ -93,8 +93,8 @@ jobs:
         Write-Host "Harvesting files with WiX Heat..."
         $env:Path += ";${env:WIX}bin"
         
-        # Use Heat to harvest all files from build\Release
-        & heat.exe dir "build\Release" `
+        # Use Heat to harvest all files from scope\bin\Release
+        & heat.exe dir "scope\bin\Release" `
           -cg HarvestedFiles `
           -gg -sfrag -srd -sreg `
           -dr INSTALLFOLDER `
@@ -121,7 +121,7 @@ jobs:
         # Compile harvested files
         Write-Host "Compiling HarvestedFiles.wxs..."
         & candle.exe "DGScope.Installer\HarvestedFiles.wxs" `
-          -dSourceDir="$PWD\build\Release" `
+          -dSourceDir="$PWD\scope\bin\Release" `
           -dProductVersion="${{ steps.version.outputs.VERSION }}" `
           -out "DGScope.Installer\obj\Release\HarvestedFiles.wixobj"
         
@@ -133,7 +133,7 @@ jobs:
         # Compile Product.wxs
         Write-Host "Compiling Product.wxs..."
         & candle.exe "DGScope.Installer\Product.wxs" `
-          -dSourceDir="$PWD\build\Release" `
+          -dSourceDir="$PWD\scope\bin\Release" `
           -dProductVersion="${{ steps.version.outputs.VERSION }}" `
           -out "DGScope.Installer\obj\Release\Product.wixobj"
         

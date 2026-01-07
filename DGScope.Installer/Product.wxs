@@ -49,7 +49,7 @@
     
     <!-- Launch app after install (optional) -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch DGScope" />
-    <Property Id="WixShellExecTarget" Value="[#scope.exe]" />
+    <Property Id="WixShellExecTarget" Value="[INSTALLFOLDER]scope.exe" />
     <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
     <InstallExecuteSequence>
       <Custom Action="LaunchApplication" After="InstallFinalize">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Custom>
