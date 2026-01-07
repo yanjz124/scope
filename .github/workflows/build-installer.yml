@@ -114,11 +114,16 @@ jobs:
         Write-Host "Building MSI installer..."
         $env:Path += ";${env:WIX}bin"
         
+        # Create output directories
+        New-Item -ItemType Directory -Force -Path "DGScope.Installer\obj\Release" | Out-Null
+        New-Item -ItemType Directory -Force -Path "DGScope.Installer\bin\Release" | Out-Null
+        
         # Compile harvested files
+        Write-Host "Compiling HarvestedFiles.wxs..."
         & candle.exe "DGScope.Installer\HarvestedFiles.wxs" `
           -dSourceDir="$PWD\build\Release" `
           -dProductVersion="${{ steps.version.outputs.VERSION }}" `
-          -out "DGScope.Installer\obj\Release\"
+          -out "DGScope.Installer\obj\Release\HarvestedFiles.wixobj"
         
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Candle.exe failed on HarvestedFiles.wxs"
@@ -126,10 +131,11 @@ jobs:
         }
         
         # Compile Product.wxs
+        Write-Host "Compiling Product.wxs..."
         & candle.exe "DGScope.Installer\Product.wxs" `
           -dSourceDir="$PWD\build\Release" `
           -dProductVersion="${{ steps.version.outputs.VERSION }}" `
-          -out "DGScope.Installer\obj\Release\"
+          -out "DGScope.Installer\obj\Release\Product.wixobj"
         
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Candle.exe failed on Product.wxs"
@@ -137,6 +143,7 @@ jobs:
         }
         
         # Link everything together
+        Write-Host "Linking MSI..."
         & light.exe "DGScope.Installer\obj\Release\Product.wixobj" `
           "DGScope.Installer\obj\Release\HarvestedFiles.wixobj" `
           -ext WixUIExtension `
