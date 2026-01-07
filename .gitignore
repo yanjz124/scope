@@ -348,3 +348,15 @@ healthchecksdb
 *imgui.ini
 /NexradDecoder/*.dll
 /NexradDecoder/ICSharpCode.SharpZipLib.dll
+
+# Installer build outputs
+DGScope.Installer/bin/
+DGScope.Installer/obj/
+installer-output/
+portable-output/
+release-output/
+*.msi
+*.wixobj
+*.wixpdb
+DGScope_temp.iss
+DGScope_build.iss
