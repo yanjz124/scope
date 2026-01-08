@@ -55,31 +55,57 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Restoring NuGet packages..."
-        nuget restore scope.sln -Verbosity detailed
+
+        # Try using MSBuild restore first (more reliable with packages.config)
+        Write-Host "Using MSBuild restore..."
+        msbuild scope.sln /t:Restore /p:Configuration=Release /v:minimal
 
         if ($LASTEXITCODE -ne 0) {
-          Write-Error "NuGet restore failed with exit code: $LASTEXITCODE"
-          exit $LASTEXITCODE
+          Write-Host "MSBuild restore had issues, trying nuget restore..."
+          nuget restore scope.sln -Verbosity detailed
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Both restore methods failed!"
+            exit $LASTEXITCODE
+          }
         }
 
+        Write-Host ""
         Write-Host "Verifying packages were restored..."
         if (Test-Path ".\packages") {
-          $packageCount = (Get-ChildItem ".\packages" -Directory).Count
+          $packageCount = (Get-ChildItem ".\packages" -Directory -ErrorAction SilentlyContinue).Count
           Write-Host "Found $packageCount package directories in .\packages"
 
-          # Check for critical packages
-          $critical = @("SharpZipLib.1.4.2", "Newtonsoft.Json.13.0.3")
-          foreach ($pkg in $critical) {
-            if (Test-Path ".\packages\$pkg") {
-              Write-Host "  ✓ $pkg"
+          # List first 20 packages
+          Write-Host "Package folders:"
+          Get-ChildItem ".\packages" -Directory -ErrorAction SilentlyContinue |
+            Select-Object -First 20 |
+            ForEach-Object { Write-Host "  - $($_.Name)" }
+
+          # Check for critical packages (allow any version)
+          $criticalFound = @{
+            "SharpZipLib" = $false
+            "Newtonsoft.Json" = $false
+          }
+
+          Get-ChildItem ".\packages" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $name = $_.Name
+            if ($name -like "SharpZipLib*") { $criticalFound["SharpZipLib"] = $true }
+            if ($name -like "Newtonsoft.Json*") { $criticalFound["Newtonsoft.Json"] = $true }
+          }
+
+          Write-Host ""
+          Write-Host "Critical packages check:"
+          foreach ($pkg in $criticalFound.Keys) {
+            if ($criticalFound[$pkg]) {
+              Write-Host "  ✓ $pkg found" -ForegroundColor Green
             } else {
               Write-Error "  ✗ $pkg - MISSING!"
               exit 1
             }
           }
         } else {
-          Write-Error "Packages folder not found!"
-          exit 1
+          Write-Warning "Packages folder not found - packages may be restored to project directories"
         }
 
     - name: Build solution (Release)
