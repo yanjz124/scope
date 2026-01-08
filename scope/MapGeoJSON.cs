@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using BAMCIS.GeoJSON;
+using Newtonsoft.Json.Linq;
 
 namespace DGScope
 {
@@ -90,11 +91,111 @@ namespace DGScope
             return null;
         }
 
+        /// <summary>
+        /// Preprocesses GeoJSON to fix invalid LineStrings with fewer than 2 positions.
+        /// LineStrings with 0 or 1 position are removed to allow the file to be parsed.
+        /// </summary>
+        private static string FixInvalidLineStrings(string json)
+        {
+            try
+            {
+                var obj = JObject.Parse(json);
+                ProcessGeometries(obj);
+                return obj.ToString();
+            }
+            catch
+            {
+                // If JSON parsing fails, return original JSON and let BAMCIS handle the error
+                return json;
+            }
+        }
+
+        private static void ProcessGeometries(JToken token)
+        {
+            if (token is JObject jObj)
+            {
+                // Handle individual geometry objects
+                if (jObj["type"]?.ToString() == "LineString")
+                {
+                    var coordinates = jObj["coordinates"] as JArray;
+                    if (coordinates != null && coordinates.Count < 2)
+                    {
+                        // Mark invalid LineString for removal
+                        jObj["_invalid"] = true;
+                    }
+                }
+
+                // Process GeometryCollection
+                if (jObj["type"]?.ToString() == "GeometryCollection")
+                {
+                    var geometries = jObj["geometries"] as JArray;
+                    if (geometries != null)
+                    {
+                        // Remove invalid LineStrings from geometries array
+                        var validGeometries = new JArray();
+                        foreach (var geom in geometries)
+                        {
+                            ProcessGeometries(geom);
+                            if (geom is JObject geomObj && geomObj["_invalid"]?.Value<bool>() != true)
+                            {
+                                geomObj.Remove("_invalid");
+                                validGeometries.Add(geom);
+                            }
+                        }
+                        jObj["geometries"] = validGeometries;
+                    }
+                }
+
+                // Process Feature Collection
+                if (jObj["type"]?.ToString() == "FeatureCollection")
+                {
+                    var features = jObj["features"] as JArray;
+                    if (features != null)
+                    {
+                        foreach (var feature in features)
+                        {
+                            ProcessGeometries(feature);
+                        }
+                    }
+                }
+
+                // Process Feature
+                if (jObj["type"]?.ToString() == "Feature")
+                {
+                    var geometry = jObj["geometry"];
+                    if (geometry != null)
+                    {
+                        ProcessGeometries(geometry);
+                    }
+                }
+
+                // Recursively process all properties
+                foreach (var prop in jObj.Properties())
+                {
+                    if (prop.Name != "_invalid")
+                    {
+                        ProcessGeometries(prop.Value);
+                    }
+                }
+            }
+            else if (token is JArray jArr)
+            {
+                foreach (var item in jArr)
+                {
+                    ProcessGeometries(item);
+                }
+            }
+        }
+
         public static VideoMapList GeoJSONToMaps(string json)
         {
             VideoMapList maps = new VideoMapList();
             GeoJsonConfig.IgnoreLatitudeValidation = true;
             GeoJsonConfig.IgnoreLongitudeValidation = true;
+            
+            // Preprocess JSON to handle invalid LineStrings with fewer than 2 positions
+            json = FixInvalidLineStrings(json);
+            
             var data = GeoJson.FromJson(json);
             switch (data.Type)
             {
