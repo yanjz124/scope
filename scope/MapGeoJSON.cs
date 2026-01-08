@@ -174,13 +174,13 @@ namespace DGScope
                     return LineStringToLines(geometry as LineString);
 
                 case GeoJsonType.Polygon:
-                    return PolygonToLines(geometry as Polygon);
+                    return PolygonToLines(geometry as BAMCIS.GeoJSON.Polygon);
 
                 case GeoJsonType.MultiLineString:
                     return MultiLineStringToLines(geometry as MultiLineString);
 
                 case GeoJsonType.MultiPolygon:
-                    return MultiPolygonToLines(geometry as MultiPolygon);
+                    return MultiPolygonToLines(geometry as BAMCIS.GeoJSON.MultiPolygon);
 
                 case GeoJsonType.GeometryCollection:
                     // Recursively process all geometries in the collection
@@ -219,7 +219,7 @@ namespace DGScope
         /// <summary>
         /// Converts a Polygon to line segments (exterior ring + interior holes)
         /// </summary>
-        private static List<Line> PolygonToLines(Polygon polygon)
+        private static List<Line> PolygonToLines(BAMCIS.GeoJSON.Polygon polygon)
         {
             if (polygon == null || polygon.Coordinates == null || polygon.Coordinates.Count == 0)
                 return null;
@@ -286,7 +286,7 @@ namespace DGScope
         /// <summary>
         /// Converts a MultiPolygon to line segments
         /// </summary>
-        private static List<Line> MultiPolygonToLines(MultiPolygon multiPolygon)
+        private static List<Line> MultiPolygonToLines(BAMCIS.GeoJSON.MultiPolygon multiPolygon)
         {
             if (multiPolygon == null || multiPolygon.Coordinates == null || multiPolygon.Coordinates.Count == 0)
                 return null;
