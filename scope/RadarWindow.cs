@@ -878,20 +878,29 @@ namespace DGScope
                             // Override map properties with XML configuration
                             map.Number = mapFile.MapNumber;
 
+                            // Fallback to filename (without extension) if names not specified
+                            string fallbackName = System.IO.Path.GetFileNameWithoutExtension(mapFile.Filepath);
+
                             if (!string.IsNullOrEmpty(mapFile.ShortName))
                                 map.Mnemonic = mapFile.ShortName;
+                            else
+                                map.Mnemonic = fallbackName;
 
                             if (!string.IsNullOrEmpty(mapFile.FullName))
                                 map.Name = mapFile.FullName;
+                            else
+                                map.Name = fallbackName;
 
+                            // BrightnessGroup defaults to A if not specified (handled by VideoMapFile default value)
                             map.Category = mapFile.BrightnessGroup;
 
                             // Add to master collection (handles number conflicts automatically)
                             VideoMaps.Add(map);
                         }
 
-                        // Update DCBMapList if DCBButton is specified
+                        // Update DCBMapList if DCBButton is specified (> 0)
                         // DCBButton is 1-indexed (button 1, 2, 3...) but array is 0-indexed
+                        // If DCBButton is 0 or negative, map will not appear on DCB but still in Ctrl+F2 selector
                         if (mapFile.DCBButton >= 1 && mapFile.DCBButton <= TCP.DCBMapList.Length)
                         {
                             TCP.DCBMapList[mapFile.DCBButton - 1] = mapFile.MapNumber;
