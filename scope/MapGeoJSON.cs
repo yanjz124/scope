@@ -100,31 +100,17 @@ namespace DGScope
             {
                 case GeoJsonType.FeatureCollection:
                     var featureCollection = data as FeatureCollection;
-                    if (featureCollection.Features.Any(x => x.Geometry.Type == GeoJsonType.LineString))
+
+                    // Check if this is a GeometryCollection-based format (multiple maps per file)
+                    if (featureCollection.Features.Any(x => x.Geometry != null && x.Geometry.Type == GeoJsonType.GeometryCollection))
                     {
-                        VideoMap map = new VideoMap();
-                        var fcl = featureCollection.Features.ToList();
-                        foreach (var feature in featureCollection.Features.Where(x => x.Geometry != null && x.Geometry.Type == GeoJsonType.LineString))
-                        {
-                            var geometry = feature.Geometry as LineString;
-                            var lines = LineStringToLines(geometry);
-                            if (lines != null)
-                            {
-                                map.Lines.AddRange(lines);
-                            }
-                        }
-                        map.Name = "Imported map - " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
-                        if (map.Lines.Count > 0)
-                        {
-                            maps.Add(map);
-                        }
-                    }
-                    else if (featureCollection.Features.Any(x => x.Geometry != null && x.Geometry.Type == GeoJsonType.GeometryCollection))
-                    {
-                        foreach (var feature in featureCollection.Features)
+                        // Each feature with GeometryCollection becomes its own map
+                        foreach (var feature in featureCollection.Features.Where(x => x.Geometry != null && x.Geometry.Type == GeoJsonType.GeometryCollection))
                         {
                             VideoMap newmap = new VideoMap();
                             var geometryCollection = feature.Geometry as GeometryCollection;
+
+                            // Extract metadata from feature properties
                             if (feature.Properties.ContainsKey("name"))
                                 newmap.Name = feature.Properties["name"];
                             if (feature.Properties.ContainsKey("number"))
@@ -133,25 +119,87 @@ namespace DGScope
                                 newmap.Mnemonic = feature.Properties["mnemonic"];
                             if (feature.Properties.ContainsKey("category"))
                                 newmap.Category = (MapCategory)(int)feature.Properties["category"];
+
+                            // Process all geometries in the collection
                             foreach (var geometry in geometryCollection.Geometries)
                             {
-                                if (geometry.Type != GeoJsonType.LineString)
-                                    continue;
-                                var lines = LineStringToLines(geometry as LineString);
-                                if (lines != null)
+                                var lines = GeometryToLines(geometry);
+                                if (lines != null && lines.Count > 0)
                                 {
                                     newmap.Lines.AddRange(lines);
                                 }
                             }
+
                             if (newmap.Lines.Count > 0)
                             {
                                 maps.Add(newmap);
                             }
                         }
                     }
+                    else
+                    {
+                        // Standard format: all features combined into a single map
+                        VideoMap map = new VideoMap();
+                        map.Name = "Imported map - " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
+
+                        foreach (var feature in featureCollection.Features.Where(x => x.Geometry != null))
+                        {
+                            var lines = GeometryToLines(feature.Geometry);
+                            if (lines != null && lines.Count > 0)
+                            {
+                                map.Lines.AddRange(lines);
+                            }
+                        }
+
+                        if (map.Lines.Count > 0)
+                        {
+                            maps.Add(map);
+                        }
+                    }
                     break;
             }
             return maps;
+        }
+
+        /// <summary>
+        /// Converts any GeoJSON geometry type to line segments for rendering
+        /// </summary>
+        private static List<Line> GeometryToLines(Geometry geometry)
+        {
+            if (geometry == null) return null;
+
+            switch (geometry.Type)
+            {
+                case GeoJsonType.LineString:
+                    return LineStringToLines(geometry as LineString);
+
+                case GeoJsonType.Polygon:
+                    return PolygonToLines(geometry as Polygon);
+
+                case GeoJsonType.MultiLineString:
+                    return MultiLineStringToLines(geometry as MultiLineString);
+
+                case GeoJsonType.MultiPolygon:
+                    return MultiPolygonToLines(geometry as MultiPolygon);
+
+                case GeoJsonType.GeometryCollection:
+                    // Recursively process all geometries in the collection
+                    var allLines = new List<Line>();
+                    var collection = geometry as GeometryCollection;
+                    foreach (var geom in collection.Geometries)
+                    {
+                        var lines = GeometryToLines(geom);
+                        if (lines != null && lines.Count > 0)
+                        {
+                            allLines.AddRange(lines);
+                        }
+                    }
+                    return allLines.Count > 0 ? allLines : null;
+
+                default:
+                    // Point, MultiPoint not supported for line rendering
+                    return null;
+            }
         }
 
         private static List<Line> LineStringToLines(LineString lineString)
@@ -166,6 +214,95 @@ namespace DGScope
                 lines.Add(new Line(end1, end2));
             }
             return lines;
+        }
+
+        /// <summary>
+        /// Converts a Polygon to line segments (exterior ring + interior holes)
+        /// </summary>
+        private static List<Line> PolygonToLines(Polygon polygon)
+        {
+            if (polygon == null || polygon.Coordinates == null || polygon.Coordinates.Count == 0)
+                return null;
+
+            var lines = new List<Line>();
+
+            // Process all rings (exterior + holes)
+            foreach (var ring in polygon.Coordinates)
+            {
+                var ringLines = LinearRingToLines(ring);
+                if (ringLines != null && ringLines.Count > 0)
+                {
+                    lines.AddRange(ringLines);
+                }
+            }
+
+            return lines.Count > 0 ? lines : null;
+        }
+
+        /// <summary>
+        /// Converts a LinearRing (closed loop) to line segments
+        /// </summary>
+        private static List<Line> LinearRingToLines(LinearRing ring)
+        {
+            if (ring == null || ring.Coordinates == null || ring.Coordinates.Count < 2)
+                return null;
+
+            var points = ring.Coordinates.ToArray();
+            var lines = new List<Line>();
+
+            // Connect each point to the next (ring automatically closes)
+            for (int i = 1; i < points.Length; i++)
+            {
+                var end1 = new GeoPoint(points[i].Latitude, points[i].Longitude);
+                var end2 = new GeoPoint(points[i - 1].Latitude, points[i - 1].Longitude);
+                lines.Add(new Line(end1, end2));
+            }
+
+            return lines;
+        }
+
+        /// <summary>
+        /// Converts a MultiLineString to line segments
+        /// </summary>
+        private static List<Line> MultiLineStringToLines(MultiLineString multiLineString)
+        {
+            if (multiLineString == null || multiLineString.Coordinates == null || multiLineString.Coordinates.Count == 0)
+                return null;
+
+            var lines = new List<Line>();
+
+            foreach (var lineString in multiLineString.Coordinates)
+            {
+                var lineStringLines = LineStringToLines(lineString);
+                if (lineStringLines != null && lineStringLines.Count > 0)
+                {
+                    lines.AddRange(lineStringLines);
+                }
+            }
+
+            return lines.Count > 0 ? lines : null;
+        }
+
+        /// <summary>
+        /// Converts a MultiPolygon to line segments
+        /// </summary>
+        private static List<Line> MultiPolygonToLines(MultiPolygon multiPolygon)
+        {
+            if (multiPolygon == null || multiPolygon.Coordinates == null || multiPolygon.Coordinates.Count == 0)
+                return null;
+
+            var lines = new List<Line>();
+
+            foreach (var polygon in multiPolygon.Coordinates)
+            {
+                var polygonLines = PolygonToLines(polygon);
+                if (polygonLines != null && polygonLines.Count > 0)
+                {
+                    lines.AddRange(polygonLines);
+                }
+            }
+
+            return lines.Count > 0 ? lines : null;
         }
     }
 }

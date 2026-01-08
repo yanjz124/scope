@@ -859,9 +859,12 @@ namespace DGScope
                                 $"No maps found in file: {mapFile.Filepath}\n\n" +
                                 $"The file was loaded but contains no displayable map data.\n" +
                                 $"Supported geometry types:\n" +
-                                $"  • LineString (creates single map)\n" +
-                                $"  • GeometryCollection (creates multiple maps)\n\n" +
-                                $"If the file contains Polygons or other geometry types, they are not currently supported.",
+                                $"  • LineString\n" +
+                                $"  • Polygon\n" +
+                                $"  • MultiLineString\n" +
+                                $"  • MultiPolygon\n" +
+                                $"  • GeometryCollection\n\n" +
+                                $"Point and MultiPoint geometries are not supported for line rendering.",
                                 "Video Map Load Warning",
                                 System.Windows.Forms.MessageBoxButtons.OK,
                                 System.Windows.Forms.MessageBoxIcon.Warning
