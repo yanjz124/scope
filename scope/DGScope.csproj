@@ -293,6 +293,7 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="VideoMap.cs" />
+    <Compile Include="VideoMapFile.cs" />
     <Compile Include="VideoMapList.cs" />
     <Compile Include="ATPAVolumeSelector.cs">
       <SubType>Form</SubType>
