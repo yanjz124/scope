@@ -221,7 +221,7 @@ namespace DGScope
         /// </summary>
         private static List<Line> PolygonToLines(BAMCIS.GeoJSON.Polygon polygon)
         {
-            if (polygon == null || polygon.Coordinates == null || polygon.Coordinates.Count == 0)
+            if (polygon == null || polygon.Coordinates == null || !polygon.Coordinates.Any())
                 return null;
 
             var lines = new List<Line>();
@@ -244,7 +244,7 @@ namespace DGScope
         /// </summary>
         private static List<Line> LinearRingToLines(LinearRing ring)
         {
-            if (ring == null || ring.Coordinates == null || ring.Coordinates.Count < 2)
+            if (ring == null || ring.Coordinates == null || ring.Coordinates.Count() < 2)
                 return null;
 
             var points = ring.Coordinates.ToArray();
@@ -266,7 +266,7 @@ namespace DGScope
         /// </summary>
         private static List<Line> MultiLineStringToLines(MultiLineString multiLineString)
         {
-            if (multiLineString == null || multiLineString.Coordinates == null || multiLineString.Coordinates.Count == 0)
+            if (multiLineString == null || multiLineString.Coordinates == null || !multiLineString.Coordinates.Any())
                 return null;
 
             var lines = new List<Line>();
@@ -288,7 +288,7 @@ namespace DGScope
         /// </summary>
         private static List<Line> MultiPolygonToLines(BAMCIS.GeoJSON.MultiPolygon multiPolygon)
         {
-            if (multiPolygon == null || multiPolygon.Coordinates == null || multiPolygon.Coordinates.Count == 0)
+            if (multiPolygon == null || multiPolygon.Coordinates == null || !multiPolygon.Coordinates.Any())
                 return null;
 
             var lines = new List<Line>();
