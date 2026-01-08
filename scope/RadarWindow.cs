@@ -888,9 +888,10 @@ namespace DGScope
                         }
 
                         // Update DCBMapList if DCBButton is specified
-                        if (mapFile.DCBButton >= 0 && mapFile.DCBButton < TCP.DCBMapList.Length)
+                        // DCBButton is 1-indexed (button 1, 2, 3...) but array is 0-indexed
+                        if (mapFile.DCBButton >= 1 && mapFile.DCBButton <= TCP.DCBMapList.Length)
                         {
-                            TCP.DCBMapList[mapFile.DCBButton] = mapFile.MapNumber;
+                            TCP.DCBMapList[mapFile.DCBButton - 1] = mapFile.MapNumber;
                         }
                     }
                 }
@@ -3777,8 +3778,6 @@ namespace DGScope
         {
             for (int i = 0; i < dcbMapButton.Length; i++)
             {
-                if (VideoMaps.Count <= i)
-                    break;
                 if (sender == dcbMapButton[i])
                 {
                     var map = VideoMaps.Where(x => x.Number == TCP.DCBMapList[i]).FirstOrDefault();

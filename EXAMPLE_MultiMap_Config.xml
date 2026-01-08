@@ -11,7 +11,7 @@
     <ShortName>RWY</ShortName>
     <FullName>ILM Runways</FullName>
     <BrightnessGroup>A</BrightnessGroup>
-    <DCBButton>0</DCBButton>  <!-- DCB Button 1 on main menu -->
+    <DCBButton>1</DCBButton>  <!-- DCB Button 1 (top-left on main menu) -->
   </VideoMapFile>
   <VideoMapFile>
     <Filepath>C:\maps\boundaries.geojson</Filepath>
@@ -19,7 +19,7 @@
     <ShortName>BDRY</ShortName>
     <FullName>Airspace Boundaries</FullName>
     <BrightnessGroup>A</BrightnessGroup>
-    <DCBButton>1</DCBButton>  <!-- DCB Button 2 on main menu -->
+    <DCBButton>2</DCBButton>  <!-- DCB Button 2 (bottom-left on main menu) -->
   </VideoMapFile>
   <VideoMapFile>
     <Filepath>C:\maps\taxiways.geojson</Filepath>
@@ -27,7 +27,7 @@
     <ShortName>TWY</ShortName>
     <FullName>Taxiways</FullName>
     <BrightnessGroup>B</BrightnessGroup>
-    <DCBButton>2</DCBButton>  <!-- DCB Button 3 on main menu -->
+    <DCBButton>3</DCBButton>  <!-- DCB Button 3 (on main menu) -->
   </VideoMapFile>
   <VideoMapFile>
     <Filepath>C:\maps\terrain.geojson</Filepath>
@@ -35,7 +35,7 @@
     <ShortName>TERR</ShortName>
     <FullName>Terrain Features</FullName>
     <BrightnessGroup>B</BrightnessGroup>
-    <DCBButton>3</DCBButton>  <!-- DCB Button 4 on main menu -->
+    <DCBButton>4</DCBButton>  <!-- DCB Button 4 (on main menu) -->
   </VideoMapFile>
 </VideoMapFiles>
 
@@ -84,7 +84,7 @@ KEY FEATURES:
 3. ShortName: Mnemonic shown on DCB button (e.g., "RWY", "BDRY")
 4. FullName: Descriptive name shown in map selector
 5. BrightnessGroup: A or B (determines which brightness control affects it)
-6. DCBButton: Which button (0-35) controls this map (0-5 on main menu, 6-31 in MAPS submenu)
+6. DCBButton: Which button (1-36) controls this map (1-6 on main menu, 7-32 in MAPS submenu)
 
 NOTES:
 - Each GeoJSON file becomes ONE map in the system

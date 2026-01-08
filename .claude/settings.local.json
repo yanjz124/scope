@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(if [ -f \"/d/Ortho Downloads/DGScope-Profile-Manager-v1.0.0/DGScope-Profile-Manager/profiles/profiles/ZDC/VideoMaps/ILM_ILMEW_RVM.geojson\" ])",
+      "Bash(then head -n 30 \"/d/Ortho Downloads/DGScope-Profile-Manager-v1.0.0/DGScope-Profile-Manager/profiles/profiles/ZDC/VideoMaps/ILM_ILMEW_RVM.geojson\")",
+      "Bash(else echo \"File not accessible from this path\")",
+      "Bash(fi)",
+      "Bash(dotnet build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd multi-file GeoJSON support and icon configuration\n\nFeatures:\n- Add VideoMapFile class for configuring multiple GeoJSON files\n- Each file can have custom map number, mnemonic, full name, brightness group, and DCB button\n- Backward compatible with existing VideoMapFilename single-file system\n- Configure scope.exe to use scopeIcon.ico\n\nDocumentation:\n- Add GUIDE_MultipleVideoMaps.md with complete usage instructions\n- Add EXAMPLE_MultiMap.geojson showing multi-map structure\n- Add EXAMPLE_MultiMap_Config.xml with configuration examples\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(nuget restore:*)"
+    ]
+  }
+}
