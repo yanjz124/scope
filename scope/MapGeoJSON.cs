@@ -241,8 +241,10 @@ namespace DGScope
             // Preprocess JSON to handle invalid LineStrings with fewer than 2 positions
             json = FixInvalidLineStrings(json);
             
-            var data = GeoJson.FromJson(json);
-            switch (data.Type)
+            try
+            {
+                var data = GeoJson.FromJson(json);
+                switch (data.Type)
             {
                 case GeoJsonType.FeatureCollection:
                     var featureCollection = data as FeatureCollection;
@@ -305,6 +307,167 @@ namespace DGScope
                     break;
             }
             return maps;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"BAMCIS parsing failed: {ex.Message}. Attempting fallback JSON parsing.");
+                // Fallback: try to extract geometries manually from the JSON
+                try
+                {
+                    return TryManualGeoJSONParse(json);
+                }
+                catch (Exception fallbackEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Fallback parsing also failed: {fallbackEx.Message}");
+                    return maps; // Return empty maps
+                }
+            }
+        }
+
+        /// <summary>
+        /// Fallback manual GeoJSON parsing when BAMCIS fails
+        /// </summary>
+        private static VideoMapList TryManualGeoJSONParse(string json)
+        {
+            var maps = new VideoMapList();
+            var obj = JObject.Parse(json);
+            
+            if (obj["type"]?.Value<string>() == "FeatureCollection")
+            {
+                var features = obj["features"] as JArray;
+                if (features != null)
+                {
+                    foreach (var feature in features)
+                    {
+                        if (feature["geometry"] != null)
+                        {
+                            var geometry = feature["geometry"];
+                            var lines = ManualGeometryToLines(geometry);
+                            if (lines != null && lines.Count > 0)
+                            {
+                                VideoMap map = new VideoMap();
+                                if (feature["properties"]?["name"] != null)
+                                    map.Name = feature["properties"]["name"].Value<string>();
+                                if (feature["properties"]?["number"] != null)
+                                    map.Number = feature["properties"]["number"].Value<int>();
+                                if (feature["properties"]?["mnemonic"] != null)
+                                    map.Mnemonic = feature["properties"]["mnemonic"].Value<string>();
+                                
+                                map.Lines.AddRange(lines);
+                                maps.Add(map);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return maps;
+        }
+
+        /// <summary>
+        /// Manually extract lines from geometry without using BAMCIS
+        /// </summary>
+        private static List<Line> ManualGeometryToLines(JToken geometry)
+        {
+            if (geometry == null || !(geometry is JObject geometryObj)) return null;
+
+            var typeStr = geometryObj["type"]?.Value<string>();
+            var lines = new List<Line>();
+
+            try
+            {
+                if (typeStr == "LineString")
+                {
+                    var coordinates = geometryObj["coordinates"] as JArray;
+                    if (coordinates != null && coordinates.Count >= 2)
+                    {
+                        for (int i = 1; i < coordinates.Count; i++)
+                        {
+                            var pt1 = coordinates[i - 1];
+                            var pt2 = coordinates[i];
+                            if (pt1 is JArray && pt2 is JArray && pt1.Count() >= 2 && pt2.Count() >= 2)
+                            {
+                                double lon1 = pt1[0].Value<double>();
+                                double lat1 = pt1[1].Value<double>();
+                                double lon2 = pt2[0].Value<double>();
+                                double lat2 = pt2[1].Value<double>();
+                                lines.Add(new Line(new GeoPoint(lat1, lon1), new GeoPoint(lat2, lon2)));
+                            }
+                        }
+                    }
+                }
+                else if (typeStr == "MultiLineString")
+                {
+                    var lineStrings = geometryObj["coordinates"] as JArray;
+                    if (lineStrings != null)
+                    {
+                        foreach (var lineString in lineStrings)
+                        {
+                            if (lineString is JArray lsArray && lsArray.Count >= 2)
+                            {
+                                for (int i = 1; i < lsArray.Count; i++)
+                                {
+                                    var pt1 = lsArray[i - 1];
+                                    var pt2 = lsArray[i];
+                                    if (pt1 is JArray && pt2 is JArray && pt1.Count() >= 2 && pt2.Count() >= 2)
+                                    {
+                                        double lon1 = pt1[0].Value<double>();
+                                        double lat1 = pt1[1].Value<double>();
+                                        double lon2 = pt2[0].Value<double>();
+                                        double lat2 = pt2[1].Value<double>();
+                                        lines.Add(new Line(new GeoPoint(lat1, lon1), new GeoPoint(lat2, lon2)));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (typeStr == "Polygon")
+                {
+                    var rings = geometryObj["coordinates"] as JArray;
+                    if (rings != null)
+                    {
+                        foreach (var ring in rings)
+                        {
+                            if (ring is JArray ringArray && ringArray.Count >= 2)
+                            {
+                                for (int i = 1; i < ringArray.Count; i++)
+                                {
+                                    var pt1 = ringArray[i - 1];
+                                    var pt2 = ringArray[i];
+                                    if (pt1 is JArray && pt2 is JArray && pt1.Count() >= 2 && pt2.Count() >= 2)
+                                    {
+                                        double lon1 = pt1[0].Value<double>();
+                                        double lat1 = pt1[1].Value<double>();
+                                        double lon2 = pt2[0].Value<double>();
+                                        double lat2 = pt2[1].Value<double>();
+                                        lines.Add(new Line(new GeoPoint(lat1, lon1), new GeoPoint(lat2, lon2)));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (typeStr == "GeometryCollection")
+                {
+                    var geometries = geometryObj["geometries"] as JArray;
+                    if (geometries != null)
+                    {
+                        foreach (var geom in geometries)
+                        {
+                            var geomLines = ManualGeometryToLines(geom);
+                            if (geomLines != null)
+                                lines.AddRange(geomLines);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in manual geometry parsing: {ex.Message}");
+            }
+
+            return lines.Count > 0 ? lines : null;
         }
 
         /// <summary>
