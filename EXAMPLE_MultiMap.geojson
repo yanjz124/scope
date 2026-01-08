@@ -1,0 +1,97 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          {
+            "type": "LineString",
+            "coordinates": [
+              [-77.90, 34.27],
+              [-77.85, 34.30]
+            ]
+          },
+          {
+            "type": "LineString",
+            "coordinates": [
+              [-77.85, 34.30],
+              [-77.80, 34.32]
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "name": "Runway Centerlines",
+        "number": 1,
+        "mnemonic": "RWY",
+        "category": 0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          {
+            "type": "LineString",
+            "coordinates": [
+              [-77.95, 34.20],
+              [-77.95, 34.35]
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "name": "Airspace Boundary",
+        "number": 2,
+        "mnemonic": "BDRY",
+        "category": 0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          {
+            "type": "LineString",
+            "coordinates": [
+              [-77.88, 34.25],
+              [-77.92, 34.28]
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "name": "Extended Centerline",
+        "number": 3,
+        "mnemonic": "EXTD",
+        "category": 1
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          {
+            "type": "LineString",
+            "coordinates": [
+              [-77.70, 34.15],
+              [-77.75, 34.18],
+              [-77.80, 34.20]
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "name": "Terrain Features",
+        "number": 4,
+        "mnemonic": "TERR",
+        "category": 1
+      }
+    }
+  ]
+}

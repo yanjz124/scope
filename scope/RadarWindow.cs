@@ -379,6 +379,9 @@ namespace DGScope
                 }
             }
         }
+        // New property for multiple video map files
+        [Browsable(false)]
+        public List<VideoMapFile> VideoMapFiles { get; set; } = new List<VideoMapFile>();
         [XmlIgnore]
         public ATPA ATPA = new ATPA();
         [DisplayName("Separation Table"), Category("ATPA")]
@@ -777,12 +780,112 @@ namespace DGScope
         {
             try
             {
-                VideoMaps = VideoMapList.DeserializeFromJsonFile(videoMapFilename);
-                VideoMaps.ForEach(x => x.Visible = CurrentPrefSet.DisplayedMaps.Contains(x.Number));
+                VideoMaps.Clear(); // Start fresh
+
+                // NEW MULTI-FILE SYSTEM: Check if VideoMapFiles has entries
+                if (VideoMapFiles != null && VideoMapFiles.Count > 0)
+                {
+                    // Warn about duplicate map numbers
+                    var duplicateMapNumbers = VideoMapFiles
+                        .GroupBy(x => x.MapNumber)
+                        .Where(g => g.Count() > 1)
+                        .Select(g => g.Key);
+
+                    if (duplicateMapNumbers.Any())
+                    {
+                        System.Windows.Forms.MessageBox.Show(
+                            $"Warning: Duplicate MapNumber(s) detected in VideoMapFiles: {string.Join(", ", duplicateMapNumbers)}\n" +
+                            "Maps will be auto-renumbered to avoid conflicts.",
+                            "Configuration Warning",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Warning
+                        );
+                    }
+
+                    // Load from multiple configured files
+                    foreach (var mapFile in VideoMapFiles)
+                    {
+                        if (string.IsNullOrEmpty(mapFile.Filepath))
+                        {
+                            System.Windows.Forms.MessageBox.Show(
+                                $"VideoMapFile entry has empty Filepath. Skipping.",
+                                "Video Map Load Warning",
+                                System.Windows.Forms.MessageBoxButtons.OK,
+                                System.Windows.Forms.MessageBoxIcon.Warning
+                            );
+                            continue;
+                        }
+
+                        if (!System.IO.File.Exists(mapFile.Filepath))
+                        {
+                            System.Windows.Forms.MessageBox.Show(
+                                $"Video map file not found: {mapFile.Filepath}",
+                                "Video Map Load Error",
+                                System.Windows.Forms.MessageBoxButtons.OK,
+                                System.Windows.Forms.MessageBoxIcon.Error
+                            );
+                            continue;
+                        }
+
+                        // Load maps from this file
+                        VideoMapList loadedMaps = VideoMapList.DeserializeFromJsonFile(mapFile.Filepath);
+
+                        if (loadedMaps == null || loadedMaps.Count == 0)
+                        {
+                            System.Windows.Forms.MessageBox.Show(
+                                $"No maps found in file: {mapFile.Filepath}",
+                                "Video Map Load Warning",
+                                System.Windows.Forms.MessageBoxButtons.OK,
+                                System.Windows.Forms.MessageBoxIcon.Warning
+                            );
+                            continue;
+                        }
+
+                        // Apply metadata from XML configuration to loaded maps
+                        foreach (var map in loadedMaps)
+                        {
+                            // Override map properties with XML configuration
+                            map.Number = mapFile.MapNumber;
+
+                            if (!string.IsNullOrEmpty(mapFile.ShortName))
+                                map.Mnemonic = mapFile.ShortName;
+
+                            if (!string.IsNullOrEmpty(mapFile.FullName))
+                                map.Name = mapFile.FullName;
+
+                            map.Category = mapFile.BrightnessGroup;
+
+                            // Add to master collection (handles number conflicts automatically)
+                            VideoMaps.Add(map);
+                        }
+
+                        // Update DCBMapList if DCBButton is specified
+                        if (mapFile.DCBButton >= 0 && mapFile.DCBButton < TCP.DCBMapList.Length)
+                        {
+                            TCP.DCBMapList[mapFile.DCBButton] = mapFile.MapNumber;
+                        }
+                    }
+                }
+                // BACKWARD COMPATIBILITY: Fall back to old single-file system
+                else if (!string.IsNullOrEmpty(videoMapFilename))
+                {
+                    VideoMaps = VideoMapList.DeserializeFromJsonFile(videoMapFilename);
+                }
+
+                // Apply visibility state from preferences
+                if (VideoMaps != null && CurrentPrefSet != null && CurrentPrefSet.DisplayedMaps != null)
+                {
+                    VideoMaps.ForEach(x => x.Visible = CurrentPrefSet.DisplayedMaps.Contains(x.Number));
+                }
             }
             catch (Exception ex)
             {
-                System.Windows.Forms.MessageBox.Show(ex.Message);
+                System.Windows.Forms.MessageBox.Show(
+                    $"Error loading video maps: {ex.Message}\n\nStack trace:\n{ex.StackTrace}",
+                    "Video Map Load Error",
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Error
+                );
             }
         }
         private void Initialize()
