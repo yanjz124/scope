@@ -56,18 +56,13 @@ jobs:
       run: |
         Write-Host "Restoring NuGet packages..."
 
-        # Try using MSBuild restore first (more reliable with packages.config)
-        Write-Host "Using MSBuild restore..."
-        msbuild scope.sln /t:Restore /p:Configuration=Release /v:minimal
+        # Use nuget restore with explicit package directory
+        Write-Host "Using nuget restore with -PackagesDirectory..."
+        nuget restore scope.sln -PackagesDirectory packages -NonInteractive -Verbosity normal
 
         if ($LASTEXITCODE -ne 0) {
-          Write-Host "MSBuild restore had issues, trying nuget restore..."
-          nuget restore scope.sln -Verbosity detailed
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Both restore methods failed!"
-            exit $LASTEXITCODE
-          }
+          Write-Error "NuGet restore failed with exit code: $LASTEXITCODE"
+          exit $LASTEXITCODE
         }
 
         Write-Host ""
@@ -76,10 +71,10 @@ jobs:
           $packageCount = (Get-ChildItem ".\packages" -Directory -ErrorAction SilentlyContinue).Count
           Write-Host "Found $packageCount package directories in .\packages"
 
-          # List first 20 packages
-          Write-Host "Package folders:"
+          # List all packages
+          Write-Host ""
+          Write-Host "All package folders:"
           Get-ChildItem ".\packages" -Directory -ErrorAction SilentlyContinue |
-            Select-Object -First 20 |
             ForEach-Object { Write-Host "  - $($_.Name)" }
 
           # Check for critical packages (allow any version)
@@ -104,12 +99,77 @@ jobs:
               exit 1
             }
           }
+
+          # Verify SharpZipLib DLL exists
+          Write-Host ""
+          Write-Host "Checking for SharpZipLib DLL..."
+          $sharpZipDll = Get-ChildItem ".\packages" -Recurse -Filter "ICSharpCode.SharpZipLib.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($sharpZipDll) {
+            Write-Host "  ✓ Found: $($sharpZipDll.FullName)"
+          } else {
+            Write-Error "  ✗ ICSharpCode.SharpZipLib.dll not found in packages!"
+          }
+
+          # Show directory structure of SharpZipLib package
+          Write-Host ""
+          Write-Host "SharpZipLib package structure:"
+          $sharpZipFolder = Get-ChildItem ".\packages" -Directory -Filter "SharpZipLib*" | Select-Object -First 1
+          if ($sharpZipFolder) {
+            Get-ChildItem $sharpZipFolder.FullName -Recurse -File | Select-Object -First 10 | ForEach-Object {
+              $relativePath = $_.FullName.Replace($sharpZipFolder.FullName, "SharpZipLib")
+              Write-Host "  $relativePath"
+            }
+          }
         } else {
-          Write-Warning "Packages folder not found - packages may be restored to project directories"
+          Write-Error "Packages folder not found!"
+          exit 1
         }
 
+    - name: Copy missing DLLs to NexradDecoder
+      shell: pwsh
+      run: |
+        Write-Host "Checking if DLLs need to be copied to NexradDecoder..."
+
+        # Find SharpZipLib DLL
+        $sharpZipDll = Get-ChildItem ".\packages" -Recurse -Filter "ICSharpCode.SharpZipLib.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+        if ($sharpZipDll) {
+          $dest = ".\NexradDecoder\ICSharpCode.SharpZipLib.dll"
+          if (-not (Test-Path $dest)) {
+            Copy-Item $sharpZipDll.FullName $dest -Force
+            Write-Host "  ✓ Copied ICSharpCode.SharpZipLib.dll to NexradDecoder"
+          } else {
+            Write-Host "  ℹ ICSharpCode.SharpZipLib.dll already exists in NexradDecoder"
+          }
+        } else {
+          Write-Error "Could not find ICSharpCode.SharpZipLib.dll to copy!"
+          exit 1
+        }
+
+        Write-Host "Done!"
+
     - name: Build solution (Release)
-      run: msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Rebuild /v:minimal
+      shell: pwsh
+      run: |
+        Write-Host "Building solution..."
+        Write-Host ""
+
+        # Build with detailed verbosity to see what's failing
+        msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Rebuild /v:detailed > build.log 2>&1
+        $buildExitCode = $LASTEXITCODE
+
+        if ($buildExitCode -ne 0) {
+          Write-Host "Build failed with exit code: $buildExitCode"
+          Write-Host ""
+          Write-Host "===== BUILD LOG (Last 200 lines) ====="
+          Get-Content build.log -Tail 200
+          Write-Host ""
+          Write-Host "===== ERRORS AND WARNINGS ====="
+          Get-Content build.log | Select-String -Pattern "(error|warning)" | Select-Object -Last 50
+          exit $buildExitCode
+        }
+
+        Write-Host "Build completed successfully!"
     
     - name: Copy receiver plugins into Release output
       shell: pwsh
