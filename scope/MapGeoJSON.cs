@@ -92,6 +92,7 @@ namespace DGScope
         }
 
         /// <summary>
+        /// <summary>
         /// Preprocesses GeoJSON to fix invalid LineStrings with fewer than 2 positions.
         /// LineStrings with 0 or 1 position are removed to allow the file to be parsed.
         /// </summary>
@@ -100,89 +101,133 @@ namespace DGScope
             try
             {
                 var obj = JObject.Parse(json);
-                ProcessGeometries(obj);
+                FixGeometriesRecursive(obj);
                 return obj.ToString();
             }
-            catch
+            catch (Exception ex)
             {
-                // If JSON parsing fails, return original JSON and let BAMCIS handle the error
+                // If JSON parsing fails, log and return original JSON
+                System.Diagnostics.Debug.WriteLine($"Error preprocessing GeoJSON: {ex.Message}");
                 return json;
             }
         }
 
-        private static void ProcessGeometries(JToken token)
+        private static void FixGeometriesRecursive(JToken token)
         {
+            if (token == null) return;
+
             if (token is JObject jObj)
             {
-                // Handle individual geometry objects
-                if (jObj["type"]?.ToString() == "LineString")
+                // Handle LineString type
+                var typeValue = jObj["type"]?.Value<string>();
+                if (typeValue == "LineString")
                 {
                     var coordinates = jObj["coordinates"] as JArray;
                     if (coordinates != null && coordinates.Count < 2)
                     {
-                        // Mark invalid LineString for removal
-                        jObj["_invalid"] = true;
+                        // Mark for deletion - will be handled by parent
+                        jObj["__delete__"] = true;
                     }
+                    return; // Don't process children of LineString
                 }
 
-                // Process GeometryCollection
-                if (jObj["type"]?.ToString() == "GeometryCollection")
+                // Handle GeometryCollection
+                if (typeValue == "GeometryCollection")
                 {
                     var geometries = jObj["geometries"] as JArray;
                     if (geometries != null)
                     {
-                        // Remove invalid LineStrings from geometries array
-                        var validGeometries = new JArray();
+                        // First, process all geometries
                         foreach (var geom in geometries)
                         {
-                            ProcessGeometries(geom);
-                            if (geom is JObject geomObj && geomObj["_invalid"]?.Value<bool>() != true)
-                            {
-                                geomObj.Remove("_invalid");
-                                validGeometries.Add(geom);
-                            }
+                            FixGeometriesRecursive(geom);
                         }
+                        
+                        // Then remove marked geometries
+                        var validGeometries = new JArray(geometries.Where(g => 
+                            g is not JObject gObj || gObj["__delete__"]?.Value<bool>() != true));
                         jObj["geometries"] = validGeometries;
+                        return;
                     }
                 }
 
-                // Process Feature Collection
-                if (jObj["type"]?.ToString() == "FeatureCollection")
+                // Handle Feature with geometry
+                if (typeValue == "Feature")
+                {
+                    var geometry = jObj["geometry"];
+                    if (geometry != null)
+                    {
+                        FixGeometriesRecursive(geometry);
+                        // If geometry was marked for deletion, set it to null
+                        if (geometry is JObject geomObj && geomObj["__delete__"]?.Value<bool>() == true)
+                        {
+                            jObj["geometry"] = null;
+                        }
+                    }
+                    return;
+                }
+
+                // Handle FeatureCollection
+                if (typeValue == "FeatureCollection")
                 {
                     var features = jObj["features"] as JArray;
                     if (features != null)
                     {
                         foreach (var feature in features)
                         {
-                            ProcessGeometries(feature);
+                            FixGeometriesRecursive(feature);
                         }
                     }
+                    return;
                 }
 
-                // Process Feature
-                if (jObj["type"]?.ToString() == "Feature")
+                // Handle MultiLineString
+                if (typeValue == "MultiLineString")
                 {
-                    var geometry = jObj["geometry"];
-                    if (geometry != null)
+                    var coordinates = jObj["coordinates"] as JArray;
+                    if (coordinates != null)
                     {
-                        ProcessGeometries(geometry);
+                        // Filter out LineStrings with less than 2 coordinates
+                        var validLines = new JArray(coordinates.Where(line =>
+                            line is JArray lineArray && lineArray.Count >= 2));
+                        jObj["coordinates"] = validLines;
                     }
+                    return;
                 }
 
-                // Recursively process all properties
-                foreach (var prop in jObj.Properties())
+                // Handle Polygon - check exterior and interior rings
+                if (typeValue == "Polygon")
                 {
-                    if (prop.Name != "_invalid")
+                    var coordinates = jObj["coordinates"] as JArray;
+                    if (coordinates != null)
                     {
-                        ProcessGeometries(prop.Value);
+                        var validRings = new JArray();
+                        foreach (var ring in coordinates)
+                        {
+                            if (ring is JArray ringArray && ringArray.Count >= 2)
+                            {
+                                validRings.Add(ring);
+                            }
+                        }
+                        jObj["coordinates"] = validRings;
+                    }
+                    return;
+                }
+
+                // Recursively process all other properties
+                foreach (var prop in jObj.Properties().ToList())
+                {
+                    if (prop.Name != "__delete__")
+                    {
+                        FixGeometriesRecursive(prop.Value);
                     }
                 }
             }
             else if (token is JArray jArr)
             {
-                foreach (var item in jArr)
+                for (int i = 0; i < jArr.Count; i++)
                 {
-                    ProcessGeometries(item);
+                    FixGeometriesRecursive(jArr[i]);
                 }
             }
         }
