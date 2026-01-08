@@ -145,7 +145,7 @@ namespace DGScope
                         
                         // Then remove marked geometries
                         var validGeometries = new JArray(geometries.Where(g => 
-                            g is not JObject gObj || gObj["__delete__"]?.Value<bool>() != true));
+                            !(g is JObject gObj && gObj["__delete__"]?.Value<bool>() == true)));
                         jObj["geometries"] = validGeometries;
                         return;
                     }
