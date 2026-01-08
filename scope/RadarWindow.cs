@@ -828,12 +828,33 @@ namespace DGScope
                         }
 
                         // Load maps from this file
-                        VideoMapList loadedMaps = VideoMapList.DeserializeFromJsonFile(mapFile.Filepath);
+                        VideoMapList loadedMaps = null;
+                        try
+                        {
+                            loadedMaps = VideoMapList.DeserializeFromJsonFile(mapFile.Filepath);
+                        }
+                        catch (Exception loadEx)
+                        {
+                            System.Windows.Forms.MessageBox.Show(
+                                $"Failed to parse GeoJSON file: {mapFile.Filepath}\n\n" +
+                                $"Error: {loadEx.Message}\n\n" +
+                                $"Ensure the file is valid GeoJSON with LineString or GeometryCollection features.",
+                                "Video Map Load Error",
+                                System.Windows.Forms.MessageBoxButtons.OK,
+                                System.Windows.Forms.MessageBoxIcon.Error
+                            );
+                            continue;
+                        }
 
                         if (loadedMaps == null || loadedMaps.Count == 0)
                         {
                             System.Windows.Forms.MessageBox.Show(
-                                $"No maps found in file: {mapFile.Filepath}",
+                                $"No maps found in file: {mapFile.Filepath}\n\n" +
+                                $"The file was loaded but contains no displayable map data.\n" +
+                                $"Supported geometry types:\n" +
+                                $"  • LineString (creates single map)\n" +
+                                $"  • GeometryCollection (creates multiple maps)\n\n" +
+                                $"If the file contains Polygons or other geometry types, they are not currently supported.",
                                 "Video Map Load Warning",
                                 System.Windows.Forms.MessageBoxButtons.OK,
                                 System.Windows.Forms.MessageBoxIcon.Warning
@@ -3803,8 +3824,6 @@ namespace DGScope
             dcbRRCntrButton.Active = RangeRingCenter == HomeLocation;
             for (int i = 0; i < dcbMapButton.Length; i++)
             {
-                if (VideoMaps.Count <= i)
-                    break;
                 var map = VideoMaps.Where(x => x.Number == TCP.DCBMapList[i]).FirstOrDefault();
                 if (map == null)
                     continue;
