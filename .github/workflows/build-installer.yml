@@ -68,15 +68,18 @@ jobs:
         Write-Host "Copying receiver and decoder assemblies into $destination"
 
         $patterns = @(
-          ".\DGScope.Receivers.*\bin\Release\**\DGScope.Receivers.*.dll",
-          ".\NexradDecoder\bin\Release\**\NexradDecoder.dll"
+          ".\DGScope.Receivers.*\bin\Release\**\*.dll",
+          ".\NexradDecoder\bin\Release\**\*.dll"
         )
 
         foreach ($pattern in $patterns) {
           Get-ChildItem -Path $pattern -File -Recurse -ErrorAction SilentlyContinue |
             ForEach-Object {
-              Copy-Item $_.FullName $destination -Force
-              Write-Host "  ✓ Copied $($_.Name)"
+              $targetPath = Join-Path $destination $_.Name
+              if (-not (Test-Path $targetPath)) {
+                Copy-Item $_.FullName $destination -Force
+                Write-Host "  ✓ Copied $($_.Name)"
+              }
             }
         }
 
