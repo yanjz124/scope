@@ -1,62 +1,95 @@
-<!-- EXAMPLE: Multi-Map Configuration for DGScope -->
-<!-- This shows how to configure multiple video maps -->
+<!-- EXAMPLE: Multi-Map Configuration for DGScope (NEW SYSTEM) -->
+<!-- This shows how to configure multiple video maps with the NEW VideoMapFiles feature -->
 
-<!-- IMPORTANT: The XML only supports ONE VideoMapFilename, not multiple! -->
-<!-- To use multiple maps, you must:
-     1. Import all your separate GeoJSON files via VideoMapForm UI
-     2. Save them to ONE consolidated file
-     3. Reference that ONE file here
--->
+<!-- NEW FEATURE: Configure multiple GeoJSON files directly in XML! -->
+<!-- Each file can have its own map number, mnemonic, name, brightness group, and DCB button -->
 
-<!-- Step 0: Point to your ONE consolidated GeoJSON file -->
-<VideoMapFilename>C:\Users\JY\Documents\scope-1\Maps\ILM_AllMaps.geojson</VideoMapFilename>
-<!-- This ONE file contains ALL your maps (created via VideoMapForm import+save) -->
+<VideoMapFiles>
+  <VideoMapFile>
+    <Filepath>C:\maps\runways.geojson</Filepath>
+    <MapNumber>1</MapNumber>
+    <ShortName>RWY</ShortName>
+    <FullName>ILM Runways</FullName>
+    <BrightnessGroup>A</BrightnessGroup>
+    <DCBButton>0</DCBButton>  <!-- DCB Button 1 on main menu -->
+  </VideoMapFile>
+  <VideoMapFile>
+    <Filepath>C:\maps\boundaries.geojson</Filepath>
+    <MapNumber>2</MapNumber>
+    <ShortName>BDRY</ShortName>
+    <FullName>Airspace Boundaries</FullName>
+    <BrightnessGroup>A</BrightnessGroup>
+    <DCBButton>1</DCBButton>  <!-- DCB Button 2 on main menu -->
+  </VideoMapFile>
+  <VideoMapFile>
+    <Filepath>C:\maps\taxiways.geojson</Filepath>
+    <MapNumber>3</MapNumber>
+    <ShortName>TWY</ShortName>
+    <FullName>Taxiways</FullName>
+    <BrightnessGroup>B</BrightnessGroup>
+    <DCBButton>2</DCBButton>  <!-- DCB Button 3 on main menu -->
+  </VideoMapFile>
+  <VideoMapFile>
+    <Filepath>C:\maps\terrain.geojson</Filepath>
+    <MapNumber>4</MapNumber>
+    <ShortName>TERR</ShortName>
+    <FullName>Terrain Features</FullName>
+    <BrightnessGroup>B</BrightnessGroup>
+    <DCBButton>3</DCBButton>  <!-- DCB Button 4 on main menu -->
+  </VideoMapFile>
+</VideoMapFiles>
 
-<!-- Step 1: Configure which maps are assigned to DCB buttons -->
+<!-- BACKWARD COMPATIBILITY: Old single-file system still works -->
+<!-- If VideoMapFiles is empty or not present, falls back to VideoMapFilename -->
+<!-- <VideoMapFilename>C:\maps\legacy_all_maps.geojson</VideoMapFilename> -->
+
+<!-- TCP Configuration -->
 <TCP>
   <DCBMapList>
-    <!-- Each entry maps a DCB button (1-32) to a map number -->
-    <int>1</int>   <!-- Button 1 (main menu MAP 1) controls Map #1 -->
-    <int>2</int>   <!-- Button 2 (main menu MAP 2) controls Map #2 -->
-    <int>3</int>   <!-- Button 3 (main menu MAP 3) controls Map #3 -->
-    <int>4</int>   <!-- Button 4 (main menu MAP 4) controls Map #4 -->
-    <int>5</int>   <!-- Button 5 (main menu MAP 5) controls Map #5 -->
-    <int>6</int>   <!-- Button 6 (main menu MAP 6) controls Map #6 -->
-    <!-- Buttons 7-32 are in the MAPS submenu -->
-    <int>7</int>   <!-- Button 7 (MAPS submenu) controls Map #7 -->
-    <int>8</int>
-    <int>9</int>
-    <int>10</int>
-    <!-- ... up to 32 total buttons ... -->
-    <int>0</int>   <!-- 0 means button not assigned -->
+    <!-- Auto-populated by VideoMapFile.DCBButton during load -->
+    <!-- Button 0-5 are on main DCB menu -->
+    <int>1</int>  <!-- Button 0 -> Map 1 (auto-set) -->
+    <int>2</int>  <!-- Button 1 -> Map 2 (auto-set) -->
+    <int>3</int>  <!-- Button 2 -> Map 3 (auto-set) -->
+    <int>4</int>  <!-- Button 3 -> Map 4 (auto-set) -->
+    <int>0</int>  <!-- Button 4 -> None -->
+    <int>0</int>  <!-- Button 5 -> None -->
+    <!-- Buttons 6-31 are in MAPS submenu -->
     <int>0</int>
-    <!-- Fill remaining slots up to 36 with zeros -->
+    <int>0</int>
+    <!-- ... continue to 36 total entries ... -->
   </DCBMapList>
 </TCP>
 
-<!-- Step 2: Set which maps are initially visible -->
+<!-- Preference Set (Initial visibility and brightness) -->
 <CurrentPrefSet>
   <DisplayedMaps>
-    <int>1</int>   <!-- Map #1 starts visible -->
-    <int>3</int>   <!-- Map #3 starts visible -->
-    <!-- Add more map numbers to show on startup -->
+    <int>1</int>  <!-- Map 1 visible on startup -->
+    <int>2</int>  <!-- Map 2 visible on startup -->
   </DisplayedMaps>
-
-  <!-- Step 3: Configure brightness for each category -->
   <Brightness>
-    <MapA>100</MapA>   <!-- Category A maps brightness (5-100) -->
-    <MapB>80</MapB>    <!-- Category B maps brightness (5-100) -->
+    <MapA>100</MapA>  <!-- Category A brightness (5-100) -->
+    <MapB>80</MapB>   <!-- Category B brightness (5-100) -->
   </Brightness>
 </CurrentPrefSet>
 
-<!-- Step 4: Colors for each category -->
+<!-- Colors for each category -->
 <VideoMapLineColor>-12566464</VideoMapLineColor>   <!-- Category A color (ARGB) -->
 <VideoMapLineColorB>-14671840</VideoMapLineColorB> <!-- Category B color (ARGB) -->
 
 <!--
+KEY FEATURES:
+1. Filepath: Path to each GeoJSON file (can be absolute or relative)
+2. MapNumber: Unique number for the map (used for DCB mapping and visibility)
+3. ShortName: Mnemonic shown on DCB button (e.g., "RWY", "BDRY")
+4. FullName: Descriptive name shown in map selector
+5. BrightnessGroup: A or B (determines which brightness control affects it)
+6. DCBButton: Which button (0-35) controls this map (0-5 on main menu, 6-31 in MAPS submenu)
+
 NOTES:
-1. Map numbers must match those in your GeoJSON file
-2. You can have unlimited maps, but only 32 can have DCB buttons
-3. Access all maps via Ctrl+F2 (VideoMapSelector)
-4. Category (A or B) is set in the GeoJSON file metadata
+- Each GeoJSON file becomes ONE map in the system
+- XML metadata overrides any properties in the GeoJSON file itself
+- DCBButton automatically updates TCP.DCBMapList during load
+- Maps can be toggled on/off via DCB buttons or Ctrl+F2 selector
+- Category A and B have independent brightness controls (MPA/MPB)
 -->
