@@ -52,8 +52,36 @@ jobs:
         Write-Host "Building version: $version"
     
     - name: Restore NuGet packages
-      run: nuget restore scope.sln
-    
+      shell: pwsh
+      run: |
+        Write-Host "Restoring NuGet packages..."
+        nuget restore scope.sln -Verbosity detailed
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "NuGet restore failed with exit code: $LASTEXITCODE"
+          exit $LASTEXITCODE
+        }
+
+        Write-Host "Verifying packages were restored..."
+        if (Test-Path ".\packages") {
+          $packageCount = (Get-ChildItem ".\packages" -Directory).Count
+          Write-Host "Found $packageCount package directories in .\packages"
+
+          # Check for critical packages
+          $critical = @("SharpZipLib.1.4.2", "Newtonsoft.Json.13.0.3")
+          foreach ($pkg in $critical) {
+            if (Test-Path ".\packages\$pkg") {
+              Write-Host "  ✓ $pkg"
+            } else {
+              Write-Error "  ✗ $pkg - MISSING!"
+              exit 1
+            }
+          }
+        } else {
+          Write-Error "Packages folder not found!"
+          exit 1
+        }
+
     - name: Build solution (Release)
       run: msbuild scope.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Rebuild /v:minimal
     
