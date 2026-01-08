@@ -802,6 +802,13 @@ namespace DGScope
                         );
                     }
 
+                    // Clear DCBMapList to prevent old button assignments from persisting
+                    // When using VideoMapFiles, only explicitly configured buttons should be assigned
+                    for (int i = 0; i < TCP.DCBMapList.Length; i++)
+                    {
+                        TCP.DCBMapList[i] = -1; // -1 means unassigned (no map will match)
+                    }
+
                     // Load from multiple configured files
                     foreach (var mapFile in VideoMapFiles)
                     {
