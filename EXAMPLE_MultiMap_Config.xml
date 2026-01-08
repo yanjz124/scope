@@ -38,13 +38,17 @@
     <DCBButton>4</DCBButton>  <!-- DCB Button 4 (on main menu) -->
   </VideoMapFile>
   <VideoMapFile>
-    <!-- OPTIONAL FIELDS EXAMPLE: Minimal configuration with defaults -->
+    <!-- OPTIONAL FIELDS EXAMPLE: Minimal configuration with all defaults -->
     <Filepath>C:\maps\mva_sectors.geojson</Filepath>
-    <MapNumber>5</MapNumber>
+    <!-- MapNumber omitted: will auto-assign next available number (5) -->
     <!-- ShortName omitted: will default to "mva_sectors" (filename) -->
     <!-- FullName omitted: will default to "mva_sectors" (filename) -->
     <!-- BrightnessGroup omitted: will default to A -->
     <!-- DCBButton omitted/0: will NOT appear on DCB, only in Ctrl+F2 selector -->
+  </VideoMapFile>
+  <VideoMapFile>
+    <!-- ULTRA MINIMAL EXAMPLE: Only filepath required! -->
+    <Filepath>C:\maps\obstacles.geojson</Filepath>
   </VideoMapFile>
 </VideoMapFiles>
 
@@ -89,13 +93,14 @@
 <!--
 KEY FEATURES:
 1. Filepath: Path to each GeoJSON file (can be absolute or relative) [REQUIRED]
-2. MapNumber: Unique number for the map (used for DCB mapping and visibility) [REQUIRED]
+2. MapNumber: Unique number for the map (used for DCB mapping and visibility) [OPTIONAL - auto-assigns]
 3. ShortName: Mnemonic shown on DCB button (e.g., "RWY", "BDRY") [OPTIONAL - defaults to filename]
 4. FullName: Descriptive name shown in map selector [OPTIONAL - defaults to filename]
 5. BrightnessGroup: A or B (determines which brightness control affects it) [OPTIONAL - defaults to A]
 6. DCBButton: Which button (1-36) controls this map [OPTIONAL - if omitted/0, map only shows in Ctrl+F2]
 
 OPTIONAL FIELD DEFAULTS:
+- MapNumber: If omitted or 0, auto-assigns next available number starting from 1
 - ShortName: If omitted or empty, uses filename without extension
 - FullName: If omitted or empty, uses filename without extension
 - BrightnessGroup: If omitted, defaults to A (MapCategory.A)

@@ -810,6 +810,8 @@ namespace DGScope
                     }
 
                     // Load from multiple configured files
+                    int nextAutoMapNumber = 1; // For auto-assigning map numbers when not specified
+
                     foreach (var mapFile in VideoMapFiles)
                     {
                         if (string.IsNullOrEmpty(mapFile.Filepath))
@@ -873,13 +875,23 @@ namespace DGScope
                         }
 
                         // Apply metadata from XML configuration to loaded maps
+                        int assignedMapNumber = mapFile.MapNumber; // Track actual assigned number for DCB mapping
+
                         foreach (var map in loadedMaps)
                         {
-                            // Override map properties with XML configuration
-                            map.Number = mapFile.MapNumber;
-
                             // Fallback to filename (without extension) if names not specified
                             string fallbackName = System.IO.Path.GetFileNameWithoutExtension(mapFile.Filepath);
+
+                            // Auto-assign map number if not specified (0 or negative)
+                            if (mapFile.MapNumber <= 0)
+                            {
+                                map.Number = nextAutoMapNumber++;
+                                assignedMapNumber = map.Number; // Remember the auto-assigned number
+                            }
+                            else
+                            {
+                                map.Number = mapFile.MapNumber;
+                            }
 
                             if (!string.IsNullOrEmpty(mapFile.ShortName))
                                 map.Mnemonic = mapFile.ShortName;
@@ -901,9 +913,10 @@ namespace DGScope
                         // Update DCBMapList if DCBButton is specified (> 0)
                         // DCBButton is 1-indexed (button 1, 2, 3...) but array is 0-indexed
                         // If DCBButton is 0 or negative, map will not appear on DCB but still in Ctrl+F2 selector
+                        // Use assignedMapNumber which accounts for auto-assigned numbers
                         if (mapFile.DCBButton >= 1 && mapFile.DCBButton <= TCP.DCBMapList.Length)
                         {
-                            TCP.DCBMapList[mapFile.DCBButton - 1] = mapFile.MapNumber;
+                            TCP.DCBMapList[mapFile.DCBButton - 1] = assignedMapNumber;
                         }
                     }
                 }
