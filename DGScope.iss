@@ -28,8 +28,7 @@ AllowNoIcons=yes
 ; InfoBeforeFile=README.md
 OutputDir=installer-output
 OutputBaseFilename=DGScope_Setup_{#MyAppVersion}
-; Uncomment the next line and provide the path to your icon file
-; SetupIconFile=scope\Resources\AppIcon.ico
+SetupIconFile=scopeIcon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
