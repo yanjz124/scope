@@ -130,17 +130,39 @@ jobs:
       run: |
         Write-Host "Checking if DLLs need to be copied to NexradDecoder..."
 
-        # Find SharpZipLib DLL
-        $sharpZipDll = Get-ChildItem ".\packages" -Recurse -Filter "ICSharpCode.SharpZipLib.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+        # Find SharpZipLib DLL - prefer net45/net461 version over netstandard2.0
+        # NexradDecoder targets .NET Framework 4.7.2, so we need .NET Framework compatible DLLs
+        $sharpZipDll = $null
+
+        # Try to find .NET Framework versions first (net45, net461, net46, net472, etc.)
+        # SharpZipLib 1.3.3 has net45 folder which is compatible with .NET Framework 4.7.2
+        $preferredPaths = @(
+          "packages\SharpZipLib.1.3.3\lib\net45\ICSharpCode.SharpZipLib.dll",
+          "packages\SharpZipLib*\lib\net45\ICSharpCode.SharpZipLib.dll",
+          "packages\SharpZipLib*\lib\net461\ICSharpCode.SharpZipLib.dll",
+          "packages\SharpZipLib*\lib\net46\ICSharpCode.SharpZipLib.dll",
+          "packages\SharpZipLib*\lib\net472\ICSharpCode.SharpZipLib.dll",
+          "packages\SharpZipLib*\lib\netstandard2.0\ICSharpCode.SharpZipLib.dll"
+        )
+
+        foreach ($path in $preferredPaths) {
+          $found = Get-ChildItem $path -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) {
+            $sharpZipDll = $found
+            Write-Host "  Found SharpZipLib at: $($found.FullName)"
+            break
+          }
+        }
+
+        if (-not $sharpZipDll) {
+          # Last resort: find any ICSharpCode.SharpZipLib.dll
+          $sharpZipDll = Get-ChildItem ".\packages" -Recurse -Filter "ICSharpCode.SharpZipLib.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
 
         if ($sharpZipDll) {
           $dest = ".\NexradDecoder\ICSharpCode.SharpZipLib.dll"
-          if (-not (Test-Path $dest)) {
-            Copy-Item $sharpZipDll.FullName $dest -Force
-            Write-Host "  ✓ Copied ICSharpCode.SharpZipLib.dll to NexradDecoder"
-          } else {
-            Write-Host "  ℹ ICSharpCode.SharpZipLib.dll already exists in NexradDecoder"
-          }
+          Copy-Item $sharpZipDll.FullName $dest -Force
+          Write-Host "  ✓ Copied ICSharpCode.SharpZipLib.dll from $($sharpZipDll.DirectoryName) to NexradDecoder"
         } else {
           Write-Error "Could not find ICSharpCode.SharpZipLib.dll to copy!"
           exit 1
