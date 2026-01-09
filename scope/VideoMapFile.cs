@@ -23,8 +23,10 @@ namespace DGScope
         // Brightness group (A or B)
         public MapCategory BrightnessGroup { get; set; } = MapCategory.A;
 
-        // Which DCB button controls this map (0-35, 0 = none)
-        public int DCBButton { get; set; }
+        // Which DCB button(s) control this map
+        // Can be single number (e.g., "3") or comma-separated (e.g., "3,11")
+        // Empty or "0" means map not on DCB, only in Ctrl+F2 selector
+        public string DCBButton { get; set; }
 
         public override string ToString()
         {

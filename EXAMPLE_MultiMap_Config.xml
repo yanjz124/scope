@@ -35,7 +35,7 @@
     <ShortName>TERR</ShortName>
     <FullName>Terrain Features</FullName>
     <BrightnessGroup>B</BrightnessGroup>
-    <DCBButton>4</DCBButton>  <!-- DCB Button 4 (on main menu) -->
+    <DCBButton>4,5</DCBButton>  <!-- MULTIPLE DCB BUTTONS: Buttons 4 and 5 both control this map -->
   </VideoMapFile>
   <VideoMapFile>
     <!-- OPTIONAL FIELDS EXAMPLE: Minimal configuration with all defaults -->
@@ -97,14 +97,21 @@ KEY FEATURES:
 3. ShortName: Mnemonic shown on DCB button (e.g., "RWY", "BDRY") [OPTIONAL - defaults to filename]
 4. FullName: Descriptive name shown in map selector [OPTIONAL - defaults to filename]
 5. BrightnessGroup: A or B (determines which brightness control affects it) [OPTIONAL - defaults to A]
-6. DCBButton: Which button (1-36) controls this map [OPTIONAL - if omitted/0, map only shows in Ctrl+F2]
+6. DCBButton: Which button(s) (1-36) control this map [OPTIONAL - if omitted/0, map only shows in Ctrl+F2]
+   - Single button: <DCBButton>3</DCBButton>
+   - Multiple buttons: <DCBButton>3,11</DCBButton> (same map on buttons 3 and 11)
 
 OPTIONAL FIELD DEFAULTS:
 - MapNumber: If omitted or 0, auto-assigns next available number starting from 1
 - ShortName: If omitted or empty, uses filename without extension
 - FullName: If omitted or empty, uses filename without extension
 - BrightnessGroup: If omitted, defaults to A (MapCategory.A)
-- DCBButton: If omitted or 0, map will NOT appear on DCB buttons but WILL appear in Ctrl+F2 selector
+- DCBButton: If omitted, empty, or 0, map will NOT appear on DCB buttons but WILL appear in Ctrl+F2 selector
+
+MULTIPLE DCB BUTTONS:
+- You can assign the same map to multiple DCB buttons using comma or semicolon separators
+- Examples: "3,11" or "3;11" - both buttons 3 and 11 will control the same map
+- Useful when you want the same map accessible from different DCB pages/locations
 
 NOTES:
 - Each GeoJSON file becomes ONE map in the system

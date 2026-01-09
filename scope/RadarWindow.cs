@@ -910,13 +910,24 @@ namespace DGScope
                             VideoMaps.Add(map);
                         }
 
-                        // Update DCBMapList if DCBButton is specified (> 0)
+                        // Update DCBMapList if DCBButton is specified
+                        // Supports single button ("3") or comma-separated ("3,11") for same map on multiple buttons
                         // DCBButton is 1-indexed (button 1, 2, 3...) but array is 0-indexed
-                        // If DCBButton is 0 or negative, map will not appear on DCB but still in Ctrl+F2 selector
+                        // If DCBButton is empty/null/0, map will not appear on DCB but still in Ctrl+F2 selector
                         // Use assignedMapNumber which accounts for auto-assigned numbers
-                        if (mapFile.DCBButton >= 1 && mapFile.DCBButton <= TCP.DCBMapList.Length)
+                        if (!string.IsNullOrWhiteSpace(mapFile.DCBButton))
                         {
-                            TCP.DCBMapList[mapFile.DCBButton - 1] = assignedMapNumber;
+                            string[] buttonStrings = mapFile.DCBButton.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                            foreach (string buttonStr in buttonStrings)
+                            {
+                                if (int.TryParse(buttonStr.Trim(), out int buttonNumber))
+                                {
+                                    if (buttonNumber >= 1 && buttonNumber <= TCP.DCBMapList.Length)
+                                    {
+                                        TCP.DCBMapList[buttonNumber - 1] = assignedMapNumber;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
