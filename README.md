@@ -74,11 +74,15 @@ DGScope can connect to various ADSB data sources:
 
 ## Documentation
 
+### For Users
 - **[DSTARS-DATA-SERVER.md](DSTARS-DATA-SERVER.md)** - Complete guide to Dstars data servers
 - **[INSTALLER-README.md](INSTALLER-README.md)** - Installer and build information
 - **[INSTALLER-QUICKSTART.md](INSTALLER-QUICKSTART.md)** - Quick installation guide
-- **[RELEASE-GUIDE.md](RELEASE-GUIDE.md)** - Guide for creating releases
 - **[GUIDE_MultipleVideoMaps.md](GUIDE_MultipleVideoMaps.md)** - Using multiple video maps
+
+### For Developers
+- **[DEVELOPER-GUIDE.md](DEVELOPER-GUIDE.md)** - Technical guide for implementing Dstars-compatible servers
+- **[RELEASE-GUIDE.md](RELEASE-GUIDE.md)** - Guide for creating releases
 
 ## Configuration Files
 
