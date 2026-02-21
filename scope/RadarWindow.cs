@@ -5243,6 +5243,8 @@ namespace DGScope
             {
                 CurrentPrefSet.DisplayedMaps = VideoMaps.Where(x => x.Visible).Select(x => x.Number).ToArray();
             }
+            // Use Max blending so overlapping lines always show the brighter color
+            GL.BlendEquation(BlendEquationMode.Max);
             foreach (var map in VideoMaps.Where(map => map.Category == MapCategory.A))
             {
                 if (CurrentPrefSet.DisplayedMaps.Contains(map.Number))
@@ -5262,6 +5264,8 @@ namespace DGScope
             }
             var colorb = AdjustedColor(VideoMapBLineColor, CurrentPrefSet.Brightness.MapB);
             DrawLines(lines, colorb);
+            // Restore standard alpha blending for subsequent rendering
+            GL.BlendEquation(BlendEquationMode.FuncAdd);
         }
 
         private void DrawLines (List<Line> lines, Color color)
