@@ -17,6 +17,7 @@
     <TargetFrameworkProfile />
     <ApplicationIcon>..\resources\scopeIcon.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
@@ -356,6 +357,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="app.manifest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\csharp-metar-decoder\csharp-metar-decoder\csharp-metar-decoder.csproj">

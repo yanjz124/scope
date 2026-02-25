@@ -159,10 +159,13 @@ namespace DGScope
             }
             StringFormat sf = new StringFormat();
             Bitmap nb;
+            float screenDpiX, screenDpiY;
             using (Graphics graphics = CreateGraphics())
             {
                 graphics.SmoothingMode = SmoothingMode.HighQuality;
                 graphics.CompositingQuality = CompositingQuality.HighQuality;
+                screenDpiX = graphics.DpiX;
+                screenDpiY = graphics.DpiY;
                 size = graphics.MeasureString(this.Text, this.Font, new PointF(), sf);
                 this.Size = new Size((int)(size.Width + this.Padding.Left + this.Padding.Right + 1), (int)(size.Height + this.Padding.Top + this.Padding.Bottom + 1));
                 var innerSize = new SizeF()
@@ -172,6 +175,7 @@ namespace DGScope
                 };
                 nb = new Bitmap((int)(innerSize.Width), (int)(innerSize.Height));
             }
+            nb.SetResolution(screenDpiX, screenDpiY);
             using (Graphics graphics = Graphics.FromImage(nb)) {
                 
                 using (GraphicsPath path = new GraphicsPath())
