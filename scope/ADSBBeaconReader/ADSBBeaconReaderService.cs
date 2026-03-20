@@ -18,6 +18,8 @@ namespace DGScope.ADSBBeaconReader
         private Timer pollTimer;
         private bool running;
         private readonly object lockObj = new object();
+        private const double PositionMatchThresholdNM = 1.5;
+        private const int AltitudeMatchThresholdFt = 500;
 
         public ADSBBeaconReaderService(
             ObservableCollection<Aircraft> aircraft,
@@ -101,6 +103,16 @@ namespace DGScope.ADSBBeaconReader
             }
         }
 
+        private static int? ParseAltitude(object altBaro)
+        {
+            if (altBaro == null) return null;
+            if (altBaro is long l) return (int)l;
+            if (altBaro is int i) return i;
+            if (altBaro is double d) return (int)d;
+            if (int.TryParse(altBaro.ToString(), out int parsed)) return parsed;
+            return null; // "ground" or other non-numeric
+        }
+
         private void MatchAndEnrich(List<ADSBv2Aircraft> results)
         {
             // Deduplicate by hex (last result wins, but they should all have the same callsign)
@@ -143,6 +155,35 @@ namespace DGScope.ADSBBeaconReader
                         var squawkMatches = aircraft.Where(x => x.Squawk == adsbAc.Squawk).ToList();
                         if (squawkMatches.Count == 1)
                             matched = squawkMatches[0];
+                    }
+
+                    // Tertiary match: by approximate position and altitude
+                    if (matched == null && adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue)
+                    {
+                        var adsbPos = new GeoPoint(adsbAc.Latitude.Value, adsbAc.Longitude.Value);
+                        int? adsbAlt = ParseAltitude(adsbAc.AltitudeBaro);
+                        Aircraft closest = null;
+                        double closestDist = PositionMatchThresholdNM;
+                        foreach (var ac in aircraft)
+                        {
+                            if (ac.Location == null || (ac.Latitude == 0 && ac.Longitude == 0))
+                                continue;
+                            if (!string.IsNullOrEmpty(ac.Callsign))
+                                continue;
+                            // Altitude check: if both have altitude, they must be within threshold
+                            if (adsbAlt.HasValue && ac.PressureAltitude != 0)
+                            {
+                                if (Math.Abs(adsbAlt.Value - ac.PressureAltitude) > AltitudeMatchThresholdFt)
+                                    continue;
+                            }
+                            var dist = adsbPos.DistanceTo(ac.Location);
+                            if (dist < closestDist)
+                            {
+                                closestDist = dist;
+                                closest = ac;
+                            }
+                        }
+                        matched = closest;
                     }
 
                     if (matched != null && string.IsNullOrEmpty(matched.Callsign))
