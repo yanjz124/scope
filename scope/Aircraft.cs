@@ -115,6 +115,7 @@ namespace DGScope
         public LeaderDirection? LDRDirection = null;
         public LeaderDirection? OwnerLeaderDirection = null;
         public bool ShowCallsignWithNoSquawk { get; set; } = false;
+        public bool LdbBeaconCodesInhibited { get; set; } = false;
         public bool FDB { 
             get
             {
@@ -564,9 +565,52 @@ namespace DGScope
             else
             {
                 //This is an LDB
-                DataBlock.Text = altstring + handoffchar + vfrchar + catchar + "\r\n     \r\n     ";
-                DataBlock2.Text = yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n     \r\n     ";
-                DataBlock3.Text = yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n     \r\n     ";
+                if (LdbBeaconCodesInhibited && !ShowCallsignWithNoSquawk)
+                {
+                    // BCB INH: single line, altitude only
+                    DataBlock.Text = altstring + handoffchar + vfrchar + catchar + "\r\n     \r\n     ";
+                    DataBlock2.Text = yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n     \r\n     ";
+                    DataBlock3.Text = yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n     \r\n     ";
+                }
+                else if (ShowCallsignWithNoSquawk)
+                {
+                    // F1 beacon readout: show all 3 lines (squawk + altitude + callsign)
+                    string squawkLine = !string.IsNullOrEmpty(Squawk) ? Squawk : "";
+                    string csLine = !string.IsNullOrEmpty(Callsign) ? Callsign : "";
+                    if (leaderDirection == LeaderDirection.W ||
+                        leaderDirection == LeaderDirection.NW ||
+                        leaderDirection == LeaderDirection.SW)
+                    {
+                        DataBlock.Text = squawkLine.PadLeft(9) + "\r\n" + (altstring + handoffchar + vfrchar + catchar).PadLeft(9) + "\r\n" + csLine.PadLeft(9);
+                        DataBlock2.Text = squawkLine.PadLeft(9) + "\r\n" + (yscratch.PadRight(3) + handoffchar + vfrchar + catchar).PadLeft(9) + "\r\n" + csLine.PadLeft(9);
+                        DataBlock3.Text = squawkLine.PadLeft(9) + "\r\n" + (yscratch.PadRight(3) + handoffchar + vfrchar + catchar).PadLeft(9) + "\r\n" + csLine.PadLeft(9);
+                    }
+                    else
+                    {
+                        DataBlock.Text = squawkLine.PadRight(9) + "\r\n" + altstring + handoffchar + vfrchar + catchar + "\r\n" + csLine.PadRight(9);
+                        DataBlock2.Text = squawkLine.PadRight(9) + "\r\n" + yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n" + csLine.PadRight(9);
+                        DataBlock3.Text = squawkLine.PadRight(9) + "\r\n" + yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n" + csLine.PadRight(9);
+                    }
+                }
+                else
+                {
+                    // Normal LDB: beacon code + altitude (2 lines)
+                    string squawkLine = !string.IsNullOrEmpty(Squawk) ? Squawk : "";
+                    if (leaderDirection == LeaderDirection.W ||
+                        leaderDirection == LeaderDirection.NW ||
+                        leaderDirection == LeaderDirection.SW)
+                    {
+                        DataBlock.Text = squawkLine.PadLeft(9) + "\r\n" + (altstring + handoffchar + vfrchar + catchar).PadLeft(9) + "\r\n     ";
+                        DataBlock2.Text = squawkLine.PadLeft(9) + "\r\n" + (yscratch.PadRight(3) + handoffchar + vfrchar + catchar).PadLeft(9) + "\r\n     ";
+                        DataBlock3.Text = squawkLine.PadLeft(9) + "\r\n" + (yscratch.PadRight(3) + handoffchar + vfrchar + catchar).PadLeft(9) + "\r\n     ";
+                    }
+                    else
+                    {
+                        DataBlock.Text = squawkLine.PadRight(9) + "\r\n" + altstring + handoffchar + vfrchar + catchar + "\r\n     ";
+                        DataBlock2.Text = squawkLine.PadRight(9) + "\r\n" + yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n     ";
+                        DataBlock3.Text = squawkLine.PadRight(9) + "\r\n" + yscratch.PadRight(3) + handoffchar + vfrchar + catchar + "\r\n     ";
+                    }
+                }
             }
 
             if (!string.IsNullOrEmpty(PositionInd))

@@ -43,6 +43,7 @@ namespace DGScope.STARS
         public int AltitudeFilterAssociatedMin { get; set; } = -9900;
         public int AltitudeFilterUnAssociatedMax { get; set; } = 99900;
         public int AltitudeFilterUnAssociatedMin { get; set; } = -9900;
+        public bool LdbBeaconCodesInhibited { get; set; } = false;
         public BrightnessSettings Brightness { get; set;  } = new BrightnessSettings();
 
         [Serializable()]

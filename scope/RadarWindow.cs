@@ -2057,7 +2057,25 @@ namespace DGScope
                                 }
                                 break;
                             case 'B': //Mutlifunction B: Beacons
-                                if (keys[0].Length >= 4 && keys[0].Length <= 6 && enter)
+                                if (keys[0].Length == 2 && enter)
+                                {
+                                    // F7 B ENTER: Toggle beacon code display in LDBs
+                                    CurrentPrefSet.LdbBeaconCodesInhibited = !CurrentPrefSet.LdbBeaconCodesInhibited;
+                                    Preview.Clear();
+                                }
+                                else if (keys[0].Length == 3 && (char)keys[0][2] == 'E' && enter)
+                                {
+                                    // F7 BE ENTER: Enable beacon code display in LDBs
+                                    CurrentPrefSet.LdbBeaconCodesInhibited = false;
+                                    Preview.Clear();
+                                }
+                                else if (keys[0].Length == 3 && (char)keys[0][2] == 'I' && enter)
+                                {
+                                    // F7 BI ENTER: Inhibit beacon code display in LDBs
+                                    CurrentPrefSet.LdbBeaconCodesInhibited = true;
+                                    Preview.Clear();
+                                }
+                                else if (keys[0].Length >= 4 && keys[0].Length <= 6 && enter)
                                 {
                                     var squawk = KeysToString(keys[0], 2);
                                     if (SelectedBeaconCodes.Contains(squawk))
@@ -5405,6 +5423,7 @@ namespace DGScope
                 }
                 aircraft.PositionIndicator.ForeColor = aircraft.DataBlock.ForeColor;
                 aircraft.DataBlock3.ForeColor = aircraft.DataBlock.ForeColor;
+                aircraft.LdbBeaconCodesInhibited = CurrentPrefSet.LdbBeaconCodesInhibited;
                 aircraft.RedrawDataBlock(radar);
                 var realWidth = aircraft.DataBlock.Width * pixelScale;
                 var realHeight = aircraft.DataBlock.Height * pixelScale;
