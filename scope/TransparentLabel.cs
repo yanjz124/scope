@@ -12,6 +12,11 @@ namespace DGScope
     /// </summary>
     public class TransparentLabel : Control
     {
+        // Cached GDI+ objects to avoid per-frame allocations
+        private static readonly StringFormat CachedStringFormat = new StringFormat();
+        private static float cachedScreenDpiX;
+        private static float cachedScreenDpiY;
+        private static bool dpiCached;
 
         private static System.Timers.Timer _flashtimer;
         private static bool flashOn = true;
@@ -150,34 +155,43 @@ namespace DGScope
                 return _backBuffer;
             }
             PointF point = new PointF(this.Padding.Left, this.Padding.Top);
-            SizeF size = new SizeF();
 
             if (this.Text is null || this.Text.Length == 0)
             {
+                _backBuffer?.Dispose();
                 _backBuffer = new Bitmap(1, 1);
                 return _backBuffer;
             }
-            StringFormat sf = new StringFormat();
-            Bitmap nb;
-            float screenDpiX, screenDpiY;
-            using (Graphics graphics = CreateGraphics())
+
+            // Cache screen DPI on first call to avoid CreateGraphics() every time
+            if (!dpiCached)
             {
-                graphics.SmoothingMode = SmoothingMode.HighQuality;
-                graphics.CompositingQuality = CompositingQuality.HighQuality;
-                screenDpiX = graphics.DpiX;
-                screenDpiY = graphics.DpiY;
-                size = graphics.MeasureString(this.Text, this.Font, new PointF(), sf);
-                this.Size = new Size((int)(size.Width + this.Padding.Left + this.Padding.Right + 1), (int)(size.Height + this.Padding.Top + this.Padding.Bottom + 1));
-                var innerSize = new SizeF()
+                using (Graphics g = CreateGraphics())
                 {
-                    Width = this.Size.Width - (this.Padding.Left + this.Padding.Right),
-                    Height = this.Size.Height - (this.Padding.Top + this.Padding.Bottom)
-                };
-                nb = new Bitmap((int)(innerSize.Width), (int)(innerSize.Height));
+                    cachedScreenDpiX = g.DpiX;
+                    cachedScreenDpiY = g.DpiY;
+                }
+                dpiCached = true;
             }
-            nb.SetResolution(screenDpiX, screenDpiY);
-            using (Graphics graphics = Graphics.FromImage(nb)) {
-                
+
+            SizeF size;
+            Bitmap nb;
+            // Use a temporary bitmap at screen DPI to measure string accurately
+            using (var measureBmp = new Bitmap(1, 1))
+            {
+                measureBmp.SetResolution(cachedScreenDpiX, cachedScreenDpiY);
+                using (Graphics graphics = Graphics.FromImage(measureBmp))
+                {
+                    size = graphics.MeasureString(this.Text, this.Font, PointF.Empty, CachedStringFormat);
+                }
+            }
+            this.Size = new Size((int)(size.Width + this.Padding.Left + this.Padding.Right + 1), (int)(size.Height + this.Padding.Top + this.Padding.Bottom + 1));
+            int innerW = this.Size.Width - (this.Padding.Left + this.Padding.Right);
+            int innerH = this.Size.Height - (this.Padding.Top + this.Padding.Bottom);
+            nb = new Bitmap(innerW, innerH);
+            nb.SetResolution(cachedScreenDpiX, cachedScreenDpiY);
+            using (Graphics graphics = Graphics.FromImage(nb))
+            {
                 using (GraphicsPath path = new GraphicsPath())
                 {
                     if (outline)
@@ -185,13 +199,11 @@ namespace DGScope
                         graphics.SmoothingMode = SmoothingMode.AntiAlias;
                         graphics.CompositingQuality = CompositingQuality.HighQuality;
                         float fontSize = graphics.DpiY * this.Font.SizeInPoints / 72;
-                        path.AddString(this.Text, this.Font.FontFamily, (int)this.Font.Style, fontSize, point, sf);
+                        path.AddString(this.Text, this.Font.FontFamily, (int)this.Font.Style, fontSize, point, CachedStringFormat);
                         using (Pen pen = new Pen(Color.Black, 2.0f))
                             graphics.DrawPath(pen, path);
                         using (SolidBrush brush = new SolidBrush(Color.White))
                             graphics.FillPath(brush, path);
-                            //graphics.DrawString(Text, this.Font, brush, point);
-
                     }
                     else
                     {
@@ -200,6 +212,7 @@ namespace DGScope
                     }
                 }
             }
+            _backBuffer?.Dispose();
             _backBuffer = nb;
             Redraw = false;
             return _backBuffer;

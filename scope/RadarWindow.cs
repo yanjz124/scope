@@ -4062,7 +4062,10 @@ namespace DGScope
             if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200)
             {
                 lock(Aircraft)
-                    ADSBtoFlightPlanCallsigns(Aircraft.ToList());
+                {
+                    foreach (var ac in Aircraft)
+                        ADSBtoFlightPlanCallsign(ac);
+                }
             }
             oldar = aspect_ratio;
             
@@ -5594,7 +5597,12 @@ namespace DGScope
                 }
                 lock (minSeps)
                 {
-                    minSeps.Where(x => x.Plane1 == aircraft || x.Plane2 == aircraft).ToList().ForEach(x => x.CalculateMinSep(radar));
+                    for (int mi = 0; mi < minSeps.Count; mi++)
+                    {
+                        var ms = minSeps[mi];
+                        if (ms.Plane1 == aircraft || ms.Plane2 == aircraft)
+                            ms.CalculateMinSep(radar);
+                    }
                 }
                 aircraft.Drawn = true;
 
@@ -6124,89 +6132,141 @@ namespace DGScope
         private void DrawTargets()
         {
             List<Aircraft> aclist;
+            var cutoff = CurrentTime.AddSeconds(-LostTargetSeconds);
             lock (Aircraft)
             {
-                aclist = Aircraft.Where(x=> x.LastMessageTime > CurrentTime.AddSeconds(-LostTargetSeconds)).ToList();
-            }
-            aclist.Where(x => x.PositionInd == ThisPositionIndicator).ToList().ForEach(x => x.Owned = true);
-            aclist.Where(x => x.TPA != null || x.ATPAFollowing != null).ToList().ForEach(x => DrawTPA(x));
-            foreach (var handoffPlane in aclist.Where(x => x.PendingHandoff == ThisPositionIndicator))
-            {
-                if (handoffPlane.Owned && handoffPlane.DataBlock.Flashing)
-                    continue;
-                handoffPlane.Owned = true;
-                handoffPlane.DataBlock.Flashing = true;
-                handoffPlane.DataBlock2.Flashing = true;
-                //if (handoffPlane.LastPositionTime > CurrentTime.AddSeconds(-LostTargetSeconds))
-                    //GenerateDataBlock(handoffPlane);
-            }
-            foreach (var handedoffPlane in aclist.Where(x => x.PositionInd == x.PendingHandoff))
-            {
-                if (handedoffPlane.PendingHandoff != null)
-                    handedoffPlane.PendingHandoff = null;
-                if (handedoffPlane.DataBlock.Flashing)
+                aclist = new List<Aircraft>(Aircraft.Count);
+                foreach (var ac in Aircraft)
                 {
-                    handedoffPlane.DataBlock.Flashing = false;
-                    handedoffPlane.DataBlock2.Flashing = false;
-                    handedoffPlane.DataBlock3.Flashing = false;
-                    //if (handedoffPlane.LastPositionTime > CurrentTime.AddSeconds(-LostTargetSeconds))
-                        //GenerateDataBlock(handedoffPlane);
+                    if (ac.LastMessageTime > cutoff)
+                        aclist.Add(ac);
                 }
             }
-            foreach (var flashingPlane in aclist.Where(x => x.DataBlock.Flashing))
+
+            // Single pass for ownership, TPA, handoff, flashing, and beaconator updates
+            for (int i = 0; i < aclist.Count; i++)
             {
-                if (flashingPlane.PendingHandoff != ThisPositionIndicator)
+                var x = aclist[i];
+
+                if (x.PositionInd == ThisPositionIndicator)
+                    x.Owned = true;
+
+                if (x.TPA != null || x.ATPAFollowing != null)
+                    DrawTPA(x);
+
+                if (x.PendingHandoff == ThisPositionIndicator)
                 {
-                    flashingPlane.DataBlock.Flashing = false;
-                    flashingPlane.DataBlock2.Flashing = false;
-                    flashingPlane.DataBlock3.Flashing = false;
-                    //if (flashingPlane.LastPositionTime > CurrentTime.AddSeconds(-LostTargetSeconds))
-                        //GenerateDataBlock(flashingPlane);
+                    if (!(x.Owned && x.DataBlock.Flashing))
+                    {
+                        x.Owned = true;
+                        x.DataBlock.Flashing = true;
+                        x.DataBlock2.Flashing = true;
+                    }
+                }
+
+                if (x.PositionInd == x.PendingHandoff)
+                {
+                    if (x.PendingHandoff != null)
+                        x.PendingHandoff = null;
+                    if (x.DataBlock.Flashing)
+                    {
+                        x.DataBlock.Flashing = false;
+                        x.DataBlock2.Flashing = false;
+                        x.DataBlock3.Flashing = false;
+                    }
+                }
+
+                if (x.DataBlock.Flashing && x.PendingHandoff != ThisPositionIndicator)
+                {
+                    x.DataBlock.Flashing = false;
+                    x.DataBlock2.Flashing = false;
+                    x.DataBlock3.Flashing = false;
+                }
+
+                if (x.ShowCallsignWithNoSquawk != showAllCallsigns && x.LocationF.X != 0)
+                {
+                    x.ShowCallsignWithNoSquawk = showAllCallsigns;
+                    lock (x) x.RedrawDataBlock(radar);
                 }
             }
-            foreach (var beaconatorplane in aclist.Where(x=> x.ShowCallsignWithNoSquawk != showAllCallsigns && x.LocationF.X != 0))
+
+            // Draw history trails and target returns
+            for (int i = 0; i < aclist.Count; i++)
             {
-                beaconatorplane.ShowCallsignWithNoSquawk = showAllCallsigns;
-                //GenerateDataBlock(beaconatorplane);
-                lock (beaconatorplane) beaconatorplane.RedrawDataBlock(radar);
-            }
-            aclist.ForEach(x =>
-            {
-                if ((!x.PrimaryOnly || x.Associated))
+                var x = aclist[i];
+                if (!x.PrimaryOnly || x.Associated)
                 {
                     lock (x.History)
                     {
-                        for (var i = x.History.Length - 1; i >= 0; i--)
+                        for (var j = x.History.Length - 1; j >= 0; j--)
                         {
-                            if (x.History[i] != null && x.History[i].ParentAircraft == null)
-                                x.History[i].ParentAircraft = x;
-                            if (x.History[i] != null)
-                                DrawTarget(x.History[i]);
+                            if (x.History[j] != null)
+                            {
+                                if (x.History[j].ParentAircraft == null)
+                                    x.History[j].ParentAircraft = x;
+                                DrawTarget(x.History[j]);
+                            }
                         }
                     }
                 }
-            });
-            aclist.ForEach(x =>
+            }
+            for (int i = 0; i < aclist.Count; i++)
             {
+                var x = aclist[i];
                 if (x.TargetReturn.ParentAircraft == null)
                     x.TargetReturn.ParentAircraft = x;
                 DrawTarget(x.TargetReturn);
-            });
+            }
+
+            // Build HashSet for O(1) membership checks
+            var acSet = new HashSet<Aircraft>(aclist);
+
             lock (posIndicators)
-                posIndicators.ForEach(x => { if (!x.ParentAircraft.FDB && aclist.Contains(x.ParentAircraft)) DrawLabel(x); });
+            {
+                for (int i = 0; i < posIndicators.Count; i++)
+                {
+                    var x = posIndicators[i];
+                    if (!x.ParentAircraft.FDB && acSet.Contains(x.ParentAircraft))
+                        DrawLabel(x);
+                }
+            }
             lock (dataBlocks)
             {
-                foreach (var block in dataBlocks.Where(x => x.ParentAircraft != null && (x.ParentAircraft.FDB || x.ParentAircraft.Associated || !x.ParentAircraft.PrimaryOnly)).ToList().OrderBy(x => x.ParentAircraft.FDB).ThenBy(x => x.ParentAircraft.Owned))
+                // Collect, filter, and sort into a reusable list to avoid allocating per-frame
+                var sortedBlocks = new List<TransparentLabel>(dataBlocks.Count);
+                var toRemove = (List<TransparentLabel>)null;
+                for (int i = 0; i < dataBlocks.Count; i++)
                 {
-                    if (block.ParentAircraft == debugPlane)
-                        debugPlane = null; 
-                    if (block.ParentAircraft != null && !aclist.Contains(block.ParentAircraft))
+                    var block = dataBlocks[i];
+                    if (block.ParentAircraft == null)
+                        continue;
+                    if (!acSet.Contains(block.ParentAircraft))
                     {
-                        dataBlocks.Remove(block);
-                        dataBlocks.Remove(block.ParentAircraft.DataBlock2);
-                        dataBlocks.Remove(block.ParentAircraft.DataBlock3);
+                        if (toRemove == null) toRemove = new List<TransparentLabel>();
+                        toRemove.Add(block);
+                        toRemove.Add(block.ParentAircraft.DataBlock2);
+                        toRemove.Add(block.ParentAircraft.DataBlock3);
                         continue;
                     }
+                    if (block.ParentAircraft.FDB || block.ParentAircraft.Associated || !block.ParentAircraft.PrimaryOnly)
+                        sortedBlocks.Add(block);
+                }
+                if (toRemove != null)
+                {
+                    for (int i = 0; i < toRemove.Count; i++)
+                        dataBlocks.Remove(toRemove[i]);
+                }
+                sortedBlocks.Sort((a, b) =>
+                {
+                    int cmp = a.ParentAircraft.FDB.CompareTo(b.ParentAircraft.FDB);
+                    if (cmp != 0) return cmp;
+                    return a.ParentAircraft.Owned.CompareTo(b.ParentAircraft.Owned);
+                });
+                for (int i = 0; i < sortedBlocks.Count; i++)
+                {
+                    var block = sortedBlocks[i];
+                    if (block.ParentAircraft == debugPlane)
+                        debugPlane = null;
                     if (CurrentPrefSet.PTLLength > 0 && (block.ParentAircraft.ShowPTL || (block.ParentAircraft.Owned && CurrentPrefSet.PTLOwn) || (block.ParentAircraft.FDB && CurrentPrefSet.PTLAll)))
                     {
                         DrawLine(block.ParentAircraft.PTL, AdjustedColor(RBLColor, CurrentPrefSet.Brightness.Tools));
@@ -6220,11 +6280,14 @@ namespace DGScope
                 }
             }
             lock (posIndicators)
-                posIndicators.ForEach(x => 
-                { 
-                    if (x.ParentAircraft.FDB && aclist.Contains(x.ParentAircraft)) 
-                        DrawLabel(x); 
-                });
+            {
+                for (int i = 0; i < posIndicators.Count; i++)
+                {
+                    var x = posIndicators[i];
+                    if (x.ParentAircraft.FDB && acSet.Contains(x.ParentAircraft))
+                        DrawLabel(x);
+                }
+            }
         }
         private void DrawLabel(TransparentLabel Label)
         {
@@ -6241,7 +6304,8 @@ namespace DGScope
 
                 }
                 GL.Enable(EnableCap.Texture2D);
-                if (Label.TextureID == 0)
+                bool isNewTexture = Label.TextureID == 0;
+                if (isNewTexture)
                     Label.TextureID = GL.GenTexture();
                 var text_texture = Label.TextureID;
                 Color color = Label.DrawColor;
@@ -6262,8 +6326,6 @@ namespace DGScope
                     GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
                     GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
                     text_bmp.UnlockBits(data);
-
-                    //text_bmp.Save($"{text_texture}.bmp");
                 }
                 if (Label.ParentAircraft != null)
                 {

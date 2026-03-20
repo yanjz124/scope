@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using System.Xml;
@@ -13,6 +14,20 @@ namespace DGScope
     /// Must have a parameterless constructor and implement <see cref="Serializable"/></typeparam>
     public class XmlSerializer<T> where T : class, new()
     {
+        // Cache serializer instances — XmlSerializer is expensive to construct
+        private static readonly ConcurrentDictionary<Type, System.Xml.Serialization.XmlSerializer> SerializerCache =
+            new ConcurrentDictionary<Type, System.Xml.Serialization.XmlSerializer>();
+
+        private static System.Xml.Serialization.XmlSerializer GetSerializer(Type type)
+        {
+            return SerializerCache.GetOrAdd(type, t => new System.Xml.Serialization.XmlSerializer(t));
+        }
+
+        private static System.Xml.Serialization.XmlSerializer GetSerializer()
+        {
+            return GetSerializer(typeof(T));
+        }
+
         /// <summary>
         /// Deserializes a XML string into an object
         /// Default encoding: <c>UTF8</c>
@@ -59,7 +74,7 @@ namespace DGScope
             if (string.IsNullOrEmpty(xml))
                 throw new ArgumentException("XML cannot be null or empty", "xml");
 
-            XmlSerializer xmlSerializer = new XmlSerializer(typeof(T));
+            var xmlSerializer = GetSerializer();
 
             using (MemoryStream memoryStream = new MemoryStream(encoding.GetBytes(xml)))
             {
@@ -94,10 +109,9 @@ namespace DGScope
             if (!File.Exists(filename))
                 throw new FileNotFoundException("Cannot find XML file to deserialize", filename);
 
-            // Create the stream writer with the specified encoding
             using (XmlReader reader = XmlReader.Create(filename, settings))
             {
-                System.Xml.Serialization.XmlSerializer xmlSerializer = new System.Xml.Serialization.XmlSerializer(typeof(T));
+                var xmlSerializer = GetSerializer();
                 return (T)xmlSerializer.Deserialize(reader);
             }
         }
@@ -151,14 +165,13 @@ namespace DGScope
             string xml = null;
             try
             {
-                XmlSerializer serializer = new XmlSerializer(source.GetType());
+                var serializer = GetSerializer(source.GetType());
 
                 using (MemoryStream memoryStream = new MemoryStream())
                 {
                     using (XmlWriter xmlWriter = XmlWriter.Create(memoryStream, settings))
                     {
-                        System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(typeof(T));
-                        x.Serialize(xmlWriter, source, namespaces);
+                        serializer.Serialize(xmlWriter, source, namespaces);
                     }
 
                     memoryStream.Position = 0; // rewind the stream before reading back.
@@ -219,12 +232,11 @@ namespace DGScope
             if (source == null)
                 throw new ArgumentNullException("source", "Object to serialize cannot be null");
 
-            XmlSerializer serializer = new XmlSerializer(source.GetType());
+            var serializer = GetSerializer(source.GetType());
 
             using (XmlWriter xmlWriter = XmlWriter.Create(filename, settings))
             {
-                System.Xml.Serialization.XmlSerializer x = new System.Xml.Serialization.XmlSerializer(typeof(T));
-                x.Serialize(xmlWriter, source, namespaces);
+                serializer.Serialize(xmlWriter, source, namespaces);
             }
         }
 

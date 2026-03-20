@@ -18,7 +18,20 @@ namespace DGScope.ADSBBeaconReader
         private Timer pollTimer;
         private bool running;
         private const double PositionMatchThresholdNM = 1.5;
+        private const double RevalidateThresholdNM = 3.0;
         private const int AltitudeMatchThresholdFt = 500;
+        private const int RevalidateIntervalPolls = 3;
+
+        // Track position-correlated assignments for re-validation
+        private readonly Dictionary<Aircraft, PositionMatch> positionMatches =
+            new Dictionary<Aircraft, PositionMatch>();
+        private int pollCount;
+
+        private class PositionMatch
+        {
+            public string Callsign;
+            public string AdsbHex;
+        }
 
         public ADSBBeaconReaderService(
             ObservableCollection<Aircraft> aircraft,
@@ -36,6 +49,7 @@ namespace DGScope.ADSBBeaconReader
         {
             if (running) return;
             running = true;
+            pollCount = 0;
             var interval = Math.Max(3, settings.PollIntervalSeconds) * 1000;
             pollTimer = new Timer(PollCallback, null, 0, interval);
         }
@@ -45,6 +59,8 @@ namespace DGScope.ADSBBeaconReader
             running = false;
             pollTimer?.Dispose();
             pollTimer = null;
+            lock (positionMatches)
+                positionMatches.Clear();
         }
 
         private void PollCallback(object state)
@@ -82,6 +98,15 @@ namespace DGScope.ADSBBeaconReader
 
                 if (allResults.Count > 0)
                     MatchAndEnrich(allResults);
+
+                // Re-validate position matches at a slower rate
+                pollCount++;
+                if (pollCount >= RevalidateIntervalPolls)
+                {
+                    pollCount = 0;
+                    if (allResults.Count > 0)
+                        RevalidatePositionMatches(allResults);
+                }
             }
             catch (Exception ex)
             {
@@ -110,7 +135,68 @@ namespace DGScope.ADSBBeaconReader
             if (altBaro is int i) return i;
             if (altBaro is double d) return (int)d;
             if (int.TryParse(altBaro.ToString(), out int parsed)) return parsed;
-            return null; // "ground" or other non-numeric
+            return null;
+        }
+
+        private void RevalidatePositionMatches(List<ADSBv2Aircraft> latestResults)
+        {
+            // Build hex lookup from latest ADSB data
+            var adsbByHex = new Dictionary<string, ADSBv2Aircraft>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ac in latestResults)
+            {
+                if (!string.IsNullOrEmpty(ac.Hex))
+                    adsbByHex[ac.Hex] = ac;
+            }
+
+            List<Aircraft> toRemove = null;
+
+            lock (positionMatches)
+            {
+                foreach (var kvp in positionMatches)
+                {
+                    var radarAc = kvp.Key;
+                    var pm = kvp.Value;
+
+                    // If aircraft no longer has the callsign we assigned, someone else cleared it
+                    if (radarAc.Callsign != pm.Callsign)
+                    {
+                        if (toRemove == null) toRemove = new List<Aircraft>();
+                        toRemove.Add(radarAc);
+                        continue;
+                    }
+
+                    // Find the ADSB target we matched against
+                    if (!adsbByHex.TryGetValue(pm.AdsbHex, out var adsbAc))
+                    {
+                        // ADSB target no longer in range — clear the callsign
+                        radarAc.Callsign = null;
+                        if (toRemove == null) toRemove = new List<Aircraft>();
+                        toRemove.Add(radarAc);
+                        continue;
+                    }
+
+                    // Check if the ADSB target has drifted away from the radar track
+                    if (adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue
+                        && radarAc.Location != null && (radarAc.Latitude != 0 || radarAc.Longitude != 0))
+                    {
+                        var adsbPos = new GeoPoint(adsbAc.Latitude.Value, adsbAc.Longitude.Value);
+                        var dist = adsbPos.DistanceTo(radarAc.Location);
+                        if (dist > RevalidateThresholdNM)
+                        {
+                            // Positions have diverged — mismatch, clear callsign
+                            radarAc.Callsign = null;
+                            if (toRemove == null) toRemove = new List<Aircraft>();
+                            toRemove.Add(radarAc);
+                        }
+                    }
+                }
+
+                if (toRemove != null)
+                {
+                    foreach (var ac in toRemove)
+                        positionMatches.Remove(ac);
+                }
+            }
         }
 
         private void MatchAndEnrich(List<ADSBv2Aircraft> results)
@@ -167,8 +253,9 @@ namespace DGScope.ADSBBeaconReader
                 }
             }
 
-            // Match and collect updates (don't hold lock during matching)
+            // Match and collect updates
             var updates = new List<KeyValuePair<Aircraft, string>>();
+            var newPositionMatches = new List<KeyValuePair<Aircraft, PositionMatch>>();
 
             foreach (var adsbAc in byHex.Values)
             {
@@ -181,6 +268,7 @@ namespace DGScope.ADSBBeaconReader
                     continue;
 
                 Aircraft matched = null;
+                bool matchedByPosition = false;
 
                 // Primary match: by Mode S hex code (O(1) dictionary lookup)
                 if (!string.IsNullOrEmpty(adsbAc.Hex))
@@ -222,13 +310,20 @@ namespace DGScope.ADSBBeaconReader
                         }
                     }
                     matched = closest;
+                    matchedByPosition = matched != null;
                 }
 
                 if (matched != null && string.IsNullOrEmpty(matched.Callsign))
                 {
                     updates.Add(new KeyValuePair<Aircraft, string>(matched, callsign));
-                    // Remove from unmatched so it won't be position-matched again
                     unmatched.Remove(matched);
+
+                    // Track position-correlated matches for re-validation
+                    if (matchedByPosition && !string.IsNullOrEmpty(adsbAc.Hex))
+                    {
+                        newPositionMatches.Add(new KeyValuePair<Aircraft, PositionMatch>(
+                            matched, new PositionMatch { Callsign = callsign, AdsbHex = adsbAc.Hex }));
+                    }
                 }
             }
 
@@ -236,6 +331,16 @@ namespace DGScope.ADSBBeaconReader
             foreach (var update in updates)
             {
                 update.Key.Callsign = update.Value;
+            }
+
+            // Record position matches for future re-validation
+            if (newPositionMatches.Count > 0)
+            {
+                lock (positionMatches)
+                {
+                    foreach (var pm in newPositionMatches)
+                        positionMatches[pm.Key] = pm.Value;
+                }
             }
         }
     }
