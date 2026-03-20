@@ -17,7 +17,6 @@ namespace DGScope.ADSBBeaconReader
         private readonly ADSBBeaconReaderSettings settings;
         private Timer pollTimer;
         private bool running;
-        private readonly object lockObj = new object();
         private const double PositionMatchThresholdNM = 1.5;
         private const int AltitudeMatchThresholdFt = 500;
 
@@ -64,6 +63,7 @@ namespace DGScope.ADSBBeaconReader
 
                 foreach (var source in enabledSources)
                 {
+                    if (!running) return;
                     try
                     {
                         var results = QuerySource(source, location, range);
@@ -115,7 +115,7 @@ namespace DGScope.ADSBBeaconReader
 
         private void MatchAndEnrich(List<ADSBv2Aircraft> results)
         {
-            // Deduplicate by hex (last result wins, but they should all have the same callsign)
+            // Deduplicate ADSB results by hex
             var byHex = new Dictionary<string, ADSBv2Aircraft>(StringComparer.OrdinalIgnoreCase);
             foreach (var ac in results)
             {
@@ -123,74 +123,119 @@ namespace DGScope.ADSBBeaconReader
                     byHex[ac.Hex] = ac;
             }
 
+            // Snapshot the aircraft list and build lookup indices outside the lock
+            List<Aircraft> snapshot;
             lock (aircraft)
             {
-                foreach (var adsbAc in byHex.Values)
+                snapshot = aircraft.ToList();
+            }
+
+            // Build O(1) lookup by ModeSCode
+            var byModeS = new Dictionary<int, Aircraft>();
+            // Build squawk lookup (only store if unique)
+            var bySquawk = new Dictionary<string, Aircraft>(StringComparer.OrdinalIgnoreCase);
+            var duplicateSquawks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Collect unmatched aircraft with positions for position correlation
+            var unmatched = new List<Aircraft>();
+
+            foreach (var ac in snapshot)
+            {
+                if (ac.ModeSCode != 0 && !byModeS.ContainsKey(ac.ModeSCode))
+                    byModeS[ac.ModeSCode] = ac;
+
+                if (!string.IsNullOrEmpty(ac.Squawk))
                 {
-                    var callsign = adsbAc.Flight?.Trim();
-                    if (string.IsNullOrEmpty(callsign))
-                        continue;
-
-                    // LADD filtering
-                    if (settings.HideLADDCallsigns && adsbAc.IsLADD)
-                        continue;
-
-                    Aircraft matched = null;
-
-                    // Primary match: by Mode S hex code
-                    if (!string.IsNullOrEmpty(adsbAc.Hex))
+                    if (duplicateSquawks.Contains(ac.Squawk))
                     {
-                        try
-                        {
-                            int modeS = Convert.ToInt32(adsbAc.Hex, 16);
-                            if (modeS != 0)
-                                matched = aircraft.FirstOrDefault(x => x.ModeSCode == modeS);
-                        }
-                        catch { }
+                        // Already known duplicate
                     }
-
-                    // Secondary match: by squawk (only if unique)
-                    if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk))
+                    else if (bySquawk.ContainsKey(ac.Squawk))
                     {
-                        var squawkMatches = aircraft.Where(x => x.Squawk == adsbAc.Squawk).ToList();
-                        if (squawkMatches.Count == 1)
-                            matched = squawkMatches[0];
+                        bySquawk.Remove(ac.Squawk);
+                        duplicateSquawks.Add(ac.Squawk);
                     }
-
-                    // Tertiary match: by approximate position and altitude
-                    if (matched == null && adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue)
+                    else
                     {
-                        var adsbPos = new GeoPoint(adsbAc.Latitude.Value, adsbAc.Longitude.Value);
-                        int? adsbAlt = ParseAltitude(adsbAc.AltitudeBaro);
-                        Aircraft closest = null;
-                        double closestDist = PositionMatchThresholdNM;
-                        foreach (var ac in aircraft)
-                        {
-                            if (ac.Location == null || (ac.Latitude == 0 && ac.Longitude == 0))
-                                continue;
-                            if (!string.IsNullOrEmpty(ac.Callsign))
-                                continue;
-                            // Altitude check: if both have altitude, they must be within threshold
-                            if (adsbAlt.HasValue && ac.PressureAltitude != 0)
-                            {
-                                if (Math.Abs(adsbAlt.Value - ac.PressureAltitude) > AltitudeMatchThresholdFt)
-                                    continue;
-                            }
-                            var dist = adsbPos.DistanceTo(ac.Location);
-                            if (dist < closestDist)
-                            {
-                                closestDist = dist;
-                                closest = ac;
-                            }
-                        }
-                        matched = closest;
-                    }
-
-                    if (matched != null && string.IsNullOrEmpty(matched.Callsign))
-                    {
-                        matched.Callsign = callsign;
+                        bySquawk[ac.Squawk] = ac;
                     }
                 }
+
+                if (string.IsNullOrEmpty(ac.Callsign) && ac.Location != null
+                    && (ac.Latitude != 0 || ac.Longitude != 0))
+                {
+                    unmatched.Add(ac);
+                }
+            }
+
+            // Match and collect updates (don't hold lock during matching)
+            var updates = new List<KeyValuePair<Aircraft, string>>();
+
+            foreach (var adsbAc in byHex.Values)
+            {
+                var callsign = adsbAc.Flight?.Trim();
+                if (string.IsNullOrEmpty(callsign))
+                    continue;
+
+                // LADD filtering
+                if (settings.HideLADDCallsigns && adsbAc.IsLADD)
+                    continue;
+
+                Aircraft matched = null;
+
+                // Primary match: by Mode S hex code (O(1) dictionary lookup)
+                if (!string.IsNullOrEmpty(adsbAc.Hex))
+                {
+                    try
+                    {
+                        int modeS = Convert.ToInt32(adsbAc.Hex, 16);
+                        if (modeS != 0)
+                            byModeS.TryGetValue(modeS, out matched);
+                    }
+                    catch { }
+                }
+
+                // Secondary match: by squawk (O(1) dictionary lookup, already filtered to unique)
+                if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk))
+                {
+                    bySquawk.TryGetValue(adsbAc.Squawk, out matched);
+                }
+
+                // Tertiary match: by approximate position and altitude
+                if (matched == null && adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue)
+                {
+                    var adsbPos = new GeoPoint(adsbAc.Latitude.Value, adsbAc.Longitude.Value);
+                    int? adsbAlt = ParseAltitude(adsbAc.AltitudeBaro);
+                    Aircraft closest = null;
+                    double closestDist = PositionMatchThresholdNM;
+                    foreach (var ac in unmatched)
+                    {
+                        if (adsbAlt.HasValue && ac.PressureAltitude != 0)
+                        {
+                            if (Math.Abs(adsbAlt.Value - ac.PressureAltitude) > AltitudeMatchThresholdFt)
+                                continue;
+                        }
+                        var dist = adsbPos.DistanceTo(ac.Location);
+                        if (dist < closestDist)
+                        {
+                            closestDist = dist;
+                            closest = ac;
+                        }
+                    }
+                    matched = closest;
+                }
+
+                if (matched != null && string.IsNullOrEmpty(matched.Callsign))
+                {
+                    updates.Add(new KeyValuePair<Aircraft, string>(matched, callsign));
+                    // Remove from unmatched so it won't be position-matched again
+                    unmatched.Remove(matched);
+                }
+            }
+
+            // Apply updates
+            foreach (var update in updates)
+            {
+                update.Key.Callsign = update.Value;
             }
         }
     }
