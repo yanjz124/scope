@@ -18,6 +18,7 @@ using System.Windows.Forms.Design;
 using System.Threading.Tasks;
 using System.Collections.ObjectModel;
 using DGScope.STARS;
+using DGScope.ADSBBeaconReader;
 using Vector4 = OpenTK.Vector4;
 using System.Xml;
 using System.Diagnostics;
@@ -687,6 +688,10 @@ namespace DGScope
         public bool WindInStatusArea { get; set; } = false;
         [DisplayName("FPS in Status Area"), Description("Show FPS in Status Area"), Category("Display Properties")]
         public bool FPSInStatusArea { get; set; } = false;
+        [DisplayName("ADS-B Beacon Reader"), Description("Settings for the ADS-B beacon reader service"), Category("Display Properties")]
+        public ADSBBeaconReaderSettings ADSBSettings { get; set; } = new ADSBBeaconReaderSettings();
+        [XmlIgnore]
+        private ADSBBeaconReaderService adsbService;
         [DisplayName("Use ADS-B Callsigns Unassociated"), Description("Use the ADS-B Callsign for unassociated tracks"), Category("Display Properties")]
         public bool UseADSBCallsigns { get; set; } = false;
         [DisplayName("Use ADS-B Callsigns Unassociated 1200"), Description("Use the ADS-B Callsign for unassociated tracks squawking 1200"), Category("Display Properties")]
@@ -1174,12 +1179,40 @@ namespace DGScope
                             System.Windows.Forms.MessageBoxIcon.Warning);
                     }
             }
+            StartADSBService();
         }
 
         public void StopReceivers()
         {
             foreach (Receiver receiver in Receivers)
                 receiver.Stop();
+            StopADSBService();
+        }
+
+        private void StartADSBService()
+        {
+            if (ADSBSettings.AnyEnabled)
+            {
+                ADSBSettings.EnsureBuiltInSources();
+                adsbService = new ADSBBeaconReaderService(
+                    Aircraft,
+                    () => HomeLocation,
+                    () => CurrentPrefSet.Range,
+                    ADSBSettings);
+                adsbService.Start();
+            }
+        }
+
+        private void StopADSBService()
+        {
+            adsbService?.Stop();
+            adsbService = null;
+        }
+
+        private void RestartADSBService()
+        {
+            StopADSBService();
+            StartADSBService();
         }
         private void OrderWaypoints()
         {
@@ -3305,6 +3338,14 @@ namespace DGScope
                     case Key.F9:
                         Preview.Clear();
                         Preview.Add(KeyCode.RngRing);
+                        break;
+                    case Key.B:
+                        ADSBSettings.EnsureBuiltInSources();
+                        var adsbForm = new ADSBBeaconReaderForm(ADSBSettings);
+                        adsbForm.Show();
+                        adsbForm.BringToFront();
+                        adsbForm.Focus();
+                        adsbForm.FormClosed += (s, args) => RestartADSBService();
                         break;
                 }
             }

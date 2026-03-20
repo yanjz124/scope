@@ -242,6 +242,15 @@
     <Compile Include="ATPAVolume.cs" />
     <Compile Include="BeaconCodeRange.cs" />
     <Compile Include="DCB.cs" />
+    <Compile Include="ADSBBeaconReader\ADSBv2Response.cs" />
+    <Compile Include="ADSBBeaconReader\ADSBBeaconReaderSettings.cs" />
+    <Compile Include="ADSBBeaconReader\ADSBBeaconReaderService.cs" />
+    <Compile Include="ADSBBeaconReader\ADSBBeaconReaderForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ADSBBeaconReader\ADSBBeaconReaderForm.Designer.cs">
+      <DependentUpon>ADSBBeaconReaderForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="DCBButton.cs" />
     <Compile Include="DCBMenu.cs" />
     <Compile Include="ITWSRadarSiteStringConverter.cs" />
