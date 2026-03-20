@@ -3684,7 +3684,7 @@ namespace DGScope
         private void DcbSubmenuButtonClick(object sender, EventArgs e)
         {
             var button = sender as DCBSubmenuButton;
-            button.SetScreenLocation(window.Location);
+            button.SetScreenLocation(window.PointToScreen(new System.Drawing.Point(0, 0)));
             activeDcbButton = button;
 
 
@@ -4626,7 +4626,8 @@ namespace DGScope
                     mousescrollcount = 0;
                 if (activeDcbButton != dcbPlaceCntrButton)
                 {
-                    var relativeloc = new Point(window.Location.X + activeDcbButton.DrawnBounds.X, window.Location.Y + activeDcbButton.DrawnBounds.Y);
+                    var clientOrigin = window.PointToScreen(new System.Drawing.Point(0, 0));
+                    var relativeloc = new Point(clientOrigin.X + activeDcbButton.DrawnBounds.X, clientOrigin.Y + activeDcbButton.DrawnBounds.Y);
                     System.Windows.Forms.Cursor.Clip = new Rectangle(relativeloc, activeDcbButton.DrawnBounds.Size);
                 }
                 CenterMouse();

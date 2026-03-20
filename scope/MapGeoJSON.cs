@@ -305,6 +305,45 @@ namespace DGScope
                         }
                     }
                     break;
+                case GeoJsonType.Feature:
+                    // Single Feature at top level
+                    var singleFeature = data as Feature;
+                    if (singleFeature?.Geometry != null)
+                    {
+                        VideoMap featureMap = new VideoMap();
+                        if (singleFeature.Properties.ContainsKey("name"))
+                            featureMap.Name = singleFeature.Properties["name"];
+                        else
+                            featureMap.Name = "Imported map - " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
+                        if (singleFeature.Properties.ContainsKey("number"))
+                            featureMap.Number = (int)singleFeature.Properties["number"];
+                        if (singleFeature.Properties.ContainsKey("mnemonic"))
+                            featureMap.Mnemonic = singleFeature.Properties["mnemonic"];
+                        if (singleFeature.Properties.ContainsKey("category"))
+                            featureMap.Category = (MapCategory)(int)singleFeature.Properties["category"];
+                        var featureLines = GeometryToLines(singleFeature.Geometry);
+                        if (featureLines != null && featureLines.Count > 0)
+                        {
+                            featureMap.Lines.AddRange(featureLines);
+                            maps.Add(featureMap);
+                        }
+                    }
+                    break;
+                case GeoJsonType.LineString:
+                case GeoJsonType.MultiLineString:
+                case GeoJsonType.Polygon:
+                case GeoJsonType.MultiPolygon:
+                case GeoJsonType.GeometryCollection:
+                    // Bare geometry at top level
+                    var geomLines = GeometryToLines(data as Geometry);
+                    if (geomLines != null && geomLines.Count > 0)
+                    {
+                        VideoMap geomMap = new VideoMap();
+                        geomMap.Name = "Imported map - " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
+                        geomMap.Lines.AddRange(geomLines);
+                        maps.Add(geomMap);
+                    }
+                    break;
             }
             return maps;
             }
@@ -331,8 +370,9 @@ namespace DGScope
         {
             var maps = new VideoMapList();
             var obj = JObject.Parse(json);
-            
-            if (obj["type"]?.Value<string>() == "FeatureCollection")
+            var topType = obj["type"]?.Value<string>();
+
+            if (topType == "FeatureCollection")
             {
                 var features = obj["features"] as JArray;
                 if (features != null)
@@ -352,7 +392,7 @@ namespace DGScope
                                     map.Number = feature["properties"]["number"].Value<int>();
                                 if (feature["properties"]?["mnemonic"] != null)
                                     map.Mnemonic = feature["properties"]["mnemonic"].Value<string>();
-                                
+
                                 map.Lines.AddRange(lines);
                                 maps.Add(map);
                             }
@@ -360,7 +400,37 @@ namespace DGScope
                     }
                 }
             }
-            
+            else if (topType == "Feature")
+            {
+                // Single Feature at top level
+                if (obj["geometry"] != null)
+                {
+                    var lines = ManualGeometryToLines(obj["geometry"]);
+                    if (lines != null && lines.Count > 0)
+                    {
+                        VideoMap map = new VideoMap();
+                        if (obj["properties"]?["name"] != null)
+                            map.Name = obj["properties"]["name"].Value<string>();
+                        else
+                            map.Name = "Imported map - " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
+                        map.Lines.AddRange(lines);
+                        maps.Add(map);
+                    }
+                }
+            }
+            else
+            {
+                // Bare geometry at top level
+                var lines = ManualGeometryToLines(obj);
+                if (lines != null && lines.Count > 0)
+                {
+                    VideoMap map = new VideoMap();
+                    map.Name = "Imported map - " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
+                    map.Lines.AddRange(lines);
+                    maps.Add(map);
+                }
+            }
+
             return maps;
         }
 
@@ -442,6 +512,38 @@ namespace DGScope
                                         double lon2 = pt2[0].Value<double>();
                                         double lat2 = pt2[1].Value<double>();
                                         lines.Add(new Line(new GeoPoint(lat1, lon1), new GeoPoint(lat2, lon2)));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (typeStr == "MultiPolygon")
+                {
+                    var polygons = geometryObj["coordinates"] as JArray;
+                    if (polygons != null)
+                    {
+                        foreach (var polygon in polygons)
+                        {
+                            if (polygon is JArray rings)
+                            {
+                                foreach (var ring in rings)
+                                {
+                                    if (ring is JArray ringArray && ringArray.Count >= 2)
+                                    {
+                                        for (int i = 1; i < ringArray.Count; i++)
+                                        {
+                                            var pt1 = ringArray[i - 1];
+                                            var pt2 = ringArray[i];
+                                            if (pt1 is JArray && pt2 is JArray && pt1.Count() >= 2 && pt2.Count() >= 2)
+                                            {
+                                                double lon1 = pt1[0].Value<double>();
+                                                double lat1 = pt1[1].Value<double>();
+                                                double lon2 = pt2[0].Value<double>();
+                                                double lat2 = pt2[1].Value<double>();
+                                                lines.Add(new Line(new GeoPoint(lat1, lon1), new GeoPoint(lat2, lon2)));
+                                            }
+                                        }
                                     }
                                 }
                             }
