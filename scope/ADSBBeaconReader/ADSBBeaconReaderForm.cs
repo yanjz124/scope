@@ -46,7 +46,6 @@ namespace DGScope.ADSBBeaconReader
         private void chkHideLADD_CheckedChanged(object sender, EventArgs e)
         {
             settings.HideLADDCallsigns = chkHideLADD.Checked;
-            // Instantly clear cached LADD callsigns so display updates immediately
             service?.ClearCallsignCache();
         }
 

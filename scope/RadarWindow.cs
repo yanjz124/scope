@@ -4059,7 +4059,7 @@ namespace DGScope
             GL.Flush();
             window.SwapBuffers();
             fps = (int)(1f / e.Time);
-            if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200 || (adsbService != null && ADSBSettings.AnyEnabled))
+            if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200 || adsbService != null)
             {
                 lock(Aircraft)
                 {
@@ -5623,24 +5623,20 @@ namespace DGScope
         }
         private async Task ADSBtoFlightPlanCallsign(Aircraft aircraft)
         {
-            // LADD backfill from SWIM-proof cache: SWIM continuously overwrites
-            // Callsign and FlightPlanCallsign to squawk for LADD aircraft.
-            // Only applies when HideLADDCallsigns is off. The cache only contains LADD targets.
+            // LADD backfill: SWIM sets Callsign=Squawk for LADD correlated tracks.
+            // Re-apply cached ADSB callsign every frame since SWIM continuously overwrites.
             if (adsbService != null && !ADSBSettings.HideLADDCallsigns)
             {
-                var cachedCs = adsbService.GetCachedCallsign(aircraft);
-                if (cachedCs != null)
+                var cached = adsbService.GetCachedCallsign(aircraft);
+                if (cached != null)
                 {
-                    aircraft.Callsign = cachedCs;
-                    aircraft.FlightPlanCallsign = cachedCs;
+                    aircraft.Callsign = cached;
+                    aircraft.FlightPlanCallsign = cached;
                     return;
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(aircraft.Callsign))
-                return;
-
-            if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign))
+            if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign) && !string.IsNullOrWhiteSpace(aircraft.Callsign))
             {
                 var associated = aircraft.Associated;
                 if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
