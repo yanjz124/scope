@@ -18,9 +18,11 @@ namespace DGScope.ADSBBeaconReader
         private readonly ADSBBeaconReaderSettings settings;
         private Timer pollTimer;
         private bool running;
-        private const double PositionMatchThresholdNM = 5.0;
-        private const double RevalidateThresholdNM = 8.0;
-        private const int AltitudeMatchThresholdFt = 1000;
+        private const double PositionMatchThresholdNM = 1.5;
+        private const double PositionMatchWithSquawkThresholdNM = 5.0;
+        private const double RevalidateThresholdNM = 5.0;
+        private const int AltitudeMatchThresholdFt = 500;
+        private const int AltitudeMatchWithSquawkThresholdFt = 1000;
         private const int RevalidateIntervalPolls = 3;
         private static readonly string LogPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -315,14 +317,45 @@ namespace DGScope.ADSBBeaconReader
                     catch { }
                 }
 
-                // Secondary match: by squawk (O(1) dictionary lookup, already filtered to unique)
+                // Secondary match: by unique squawk (O(1) dictionary lookup)
                 if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk))
                 {
                     if (bySquawk.TryGetValue(adsbAc.Squawk, out matched))
                         matchMethod = "squawk";
                 }
 
-                // Tertiary match: by approximate position and altitude
+                // Tertiary match: squawk + relaxed position (for duplicate squawks)
+                // Squawk narrows candidates, position disambiguates with wider threshold
+                if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk)
+                    && duplicateSquawks.Contains(adsbAc.Squawk)
+                    && adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue)
+                {
+                    var adsbPos = new GeoPoint(adsbAc.Latitude.Value, adsbAc.Longitude.Value);
+                    int? adsbAlt = ParseAltitude(adsbAc.AltitudeBaro);
+                    Aircraft closest = null;
+                    double closestDist = PositionMatchWithSquawkThresholdNM;
+                    foreach (var ac in unmatched)
+                    {
+                        if (ac.Squawk != adsbAc.Squawk) continue;
+                        if (adsbAlt.HasValue && ac.PressureAltitude != 0)
+                        {
+                            if (Math.Abs(adsbAlt.Value - ac.PressureAltitude) > AltitudeMatchWithSquawkThresholdFt)
+                                continue;
+                        }
+                        var dist = adsbPos.DistanceTo(ac.Location);
+                        if (dist < closestDist)
+                        {
+                            closestDist = dist;
+                            closest = ac;
+                        }
+                    }
+                    matched = closest;
+                    matchedByPosition = matched != null;
+                    if (matched != null)
+                        matchMethod = $"squawk+position({closestDist:F2}nm)";
+                }
+
+                // Quaternary match: position-only with tight threshold (no squawk info)
                 if (matched == null && adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue)
                 {
                     var adsbPos = new GeoPoint(adsbAc.Latitude.Value, adsbAc.Longitude.Value);
