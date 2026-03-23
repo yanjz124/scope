@@ -1191,9 +1191,9 @@ namespace DGScope
 
         private void StartADSBService()
         {
+            ADSBSettings.EnsureBuiltInSources();
             if (ADSBSettings.AnyEnabled)
             {
-                ADSBSettings.EnsureBuiltInSources();
                 adsbService = new ADSBBeaconReaderService(
                     Aircraft,
                     () => HomeLocation,

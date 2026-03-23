@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
@@ -19,6 +20,14 @@ namespace DGScope.ADSBBeaconReader
         private bool running;
         private const double PositionMatchThresholdNM = 1.5;
         private const double RevalidateThresholdNM = 3.0;
+        private static readonly string LogPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DGScope Profile Manager", "adsb_beacon_reader.log");
+
+        private static void Log(string msg)
+        {
+            try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss} {msg}\r\n"); } catch { }
+        }
         private const int AltitudeMatchThresholdFt = 500;
         private const int RevalidateIntervalPolls = 3;
 
@@ -50,6 +59,7 @@ namespace DGScope.ADSBBeaconReader
             if (running) return;
             running = true;
             pollCount = 0;
+            Log($"Service starting. Sources: {settings.Sources.Count} ({settings.Sources.Count(s => s.Enabled)} enabled). HideLADD: {settings.HideLADDCallsigns}");
             var interval = Math.Max(3, settings.PollIntervalSeconds) * 1000;
             pollTimer = new Timer(PollCallback, null, 0, interval);
         }
@@ -71,10 +81,15 @@ namespace DGScope.ADSBBeaconReader
             {
                 var location = getLocation();
                 var range = getRange();
+                Log($"Poll - Location: {location?.Latitude:F4},{location?.Longitude:F4} Range: {range}");
                 if (location == null || (location.Latitude == 0 && location.Longitude == 0))
+                {
+                    Log("Skipping - no valid location");
                     return;
+                }
 
                 var enabledSources = settings.Sources.Where(s => s.Enabled).ToList();
+                Log($"{enabledSources.Count} enabled sources");
                 var allResults = new List<ADSBv2Aircraft>();
 
                 foreach (var source in enabledSources)
@@ -88,7 +103,7 @@ namespace DGScope.ADSBBeaconReader
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"ADSB Beacon Reader: Error querying {source.Name}: {ex.Message}");
+                        Log($"Error querying {source.Name}: {ex.Message}");
                     }
 
                     // Rate limit: 1 request per second per API
@@ -96,6 +111,7 @@ namespace DGScope.ADSBBeaconReader
                         Thread.Sleep(1100);
                 }
 
+                Log($"Got {allResults.Count} ADSB aircraft total");
                 if (allResults.Count > 0)
                     MatchAndEnrich(allResults);
 
@@ -110,7 +126,7 @@ namespace DGScope.ADSBBeaconReader
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"ADSB Beacon Reader: Poll error: {ex.Message}");
+                Log($"Poll error: {ex.Message}");
             }
         }
 
@@ -264,7 +280,8 @@ namespace DGScope.ADSBBeaconReader
                     continue;
 
                 // LADD filtering
-                if (settings.HideLADDCallsigns && adsbAc.IsLADD)
+                bool isLADD = adsbAc.IsLADD;
+                if (settings.HideLADDCallsigns && isLADD)
                     continue;
 
                 Aircraft matched = null;
@@ -313,7 +330,15 @@ namespace DGScope.ADSBBeaconReader
                     matchedByPosition = matched != null;
                 }
 
-                if (matched != null && string.IsNullOrEmpty(matched.Callsign))
+                // Enrich if callsign is empty, or if it's a SWIM LADD aircraft
+                // (callsign == squawk, meaning SWIM substituted the transponder code)
+                // and the user has opted to not respect LADD
+                bool needsEnrichment = string.IsNullOrEmpty(matched?.Callsign)
+                    || (!settings.HideLADDCallsigns && isLADD
+                        && !string.IsNullOrEmpty(matched.Squawk)
+                        && matched.Callsign == matched.Squawk);
+
+                if (matched != null && needsEnrichment)
                 {
                     updates.Add(new KeyValuePair<Aircraft, string>(matched, callsign));
                     unmatched.Remove(matched);
@@ -324,12 +349,15 @@ namespace DGScope.ADSBBeaconReader
                         newPositionMatches.Add(new KeyValuePair<Aircraft, PositionMatch>(
                             matched, new PositionMatch { Callsign = callsign, AdsbHex = adsbAc.Hex }));
                     }
+
                 }
             }
 
             // Apply updates
+            Log($"Matched {updates.Count} of {byHex.Count} ADSB aircraft (radar targets: {snapshot.Count}, unmatched: {unmatched.Count})");
             foreach (var update in updates)
             {
+                Log($"  {update.Key.Squawk}/{update.Key.ModeSCode:X6} -> {update.Value}");
                 update.Key.Callsign = update.Value;
             }
 
