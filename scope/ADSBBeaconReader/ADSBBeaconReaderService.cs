@@ -18,9 +18,9 @@ namespace DGScope.ADSBBeaconReader
         private readonly ADSBBeaconReaderSettings settings;
         private Timer pollTimer;
         private bool running;
-        private const double PositionMatchThresholdNM = 1.5;
-        private const double RevalidateThresholdNM = 3.0;
-        private const int AltitudeMatchThresholdFt = 500;
+        private const double PositionMatchThresholdNM = 5.0;
+        private const double RevalidateThresholdNM = 8.0;
+        private const int AltitudeMatchThresholdFt = 1000;
         private const int RevalidateIntervalPolls = 3;
         private static readonly string LogPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

@@ -5640,10 +5640,10 @@ namespace DGScope
             {
                 var associated = aircraft.Associated;
 
-                // ADSB-enriched LADD tracks: always copy Callsign to FlightPlanCallsign
-                // so FDB displays the real callsign instead of squawk
-                if (adsbService != null && !ADSBSettings.HideLADDCallsigns
-                    && aircraft.Callsign != aircraft.Squawk)
+                // If ADSB service is running and Callsign is a real callsign (not squawk),
+                // always fill FlightPlanCallsign — SWIM sometimes leaves FPC empty for
+                // correlated tracks even when Callsign is set.
+                if (adsbService != null && aircraft.Callsign != aircraft.Squawk)
                 {
                     aircraft.FlightPlanCallsign = aircraft.Callsign;
                 }
