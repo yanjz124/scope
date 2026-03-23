@@ -23,6 +23,44 @@ namespace DGScope.ADSBBeaconReader
         private const double RevalidateThresholdNM = 5.0;
         private const int AltitudeMatchThresholdFt = 500;
         private const int AltitudeMatchWithSquawkThresholdFt = 1000;
+
+        /// <summary>
+        /// Non-discrete squawk codes per FAA JO 7110.66H (NBCAP) and JO 7110.65.
+        /// These are shared by multiple aircraft and unreliable for correlation.
+        /// Includes: 64 non-discrete codes (xx00 octal pattern) plus
+        /// conspicuity/special-use codes from 7110.65 Ch5 S2.
+        /// </summary>
+        private static readonly HashSet<string> NonDiscreteSquawks = BuildNonDiscreteSet();
+
+        private static HashSet<string> BuildNonDiscreteSet()
+        {
+            var set = new HashSet<string>();
+            // 64 non-discrete codes: all codes ending in 00 (octal).
+            // Format is 4 octal digits (0-7 each). xx00 = first two digits vary.
+            for (int d1 = 0; d1 <= 7; d1++)
+                for (int d2 = 0; d2 <= 7; d2++)
+                    set.Add($"{d1}{d2}00");
+
+            // Conspicuity / special-use codes (FAA JO 7110.65 Ch5 S2)
+            set.Add("1200"); // VFR
+            set.Add("1202"); // SAR (USAF/USCG)
+            set.Add("1203"); // VFR formation lead
+            set.Add("1255"); // Firefighting
+            set.Add("1277"); // SAR/glider
+            set.Add("2000"); // IFR without discrete assignment
+            set.Add("4000"); // Military VFR / special ops
+            set.Add("7400"); // UAS lost link
+            set.Add("7500"); // Hijack
+            set.Add("7600"); // Radio failure
+            set.Add("7700"); // Emergency
+            set.Add("7777"); // Military intercept
+            return set;
+        }
+
+        private static bool IsDiscreteSquawk(string squawk)
+        {
+            return !string.IsNullOrEmpty(squawk) && !NonDiscreteSquawks.Contains(squawk);
+        }
         private const int RevalidateIntervalPolls = 3;
         private static readonly string LogPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -317,16 +355,16 @@ namespace DGScope.ADSBBeaconReader
                     catch { }
                 }
 
-                // Secondary match: by unique squawk (O(1) dictionary lookup)
-                if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk))
+                // Secondary match: by unique discrete squawk (O(1) dictionary lookup)
+                if (matched == null && IsDiscreteSquawk(adsbAc.Squawk))
                 {
                     if (bySquawk.TryGetValue(adsbAc.Squawk, out matched))
                         matchMethod = "squawk";
                 }
 
-                // Tertiary match: squawk + relaxed position (for duplicate squawks)
+                // Tertiary match: discrete squawk + relaxed position (for duplicate squawks)
                 // Squawk narrows candidates, position disambiguates with wider threshold
-                if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk)
+                if (matched == null && IsDiscreteSquawk(adsbAc.Squawk)
                     && duplicateSquawks.Contains(adsbAc.Squawk)
                     && adsbAc.Latitude.HasValue && adsbAc.Longitude.HasValue)
                 {
