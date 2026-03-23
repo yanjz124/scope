@@ -5623,18 +5623,22 @@ namespace DGScope
         }
         private async Task ADSBtoFlightPlanCallsign(Aircraft aircraft)
         {
+            // LADD backfill from SWIM-proof cache: SWIM continuously overwrites
+            // Callsign and FlightPlanCallsign to squawk for LADD aircraft.
+            // The ADSB service stores real callsigns in a cache that SWIM can't touch.
+            if (adsbService != null)
+            {
+                var cachedCs = adsbService.GetCachedCallsign(aircraft);
+                if (cachedCs != null)
+                {
+                    aircraft.Callsign = cachedCs;
+                    aircraft.FlightPlanCallsign = cachedCs;
+                    return;
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(aircraft.Callsign))
                 return;
-
-            // LADD backfill: SWIM substituted squawk as FlightPlanCallsign.
-            // If we have a real callsign from ADSB (Callsign != Squawk), always fix it.
-            if (!string.IsNullOrEmpty(aircraft.Squawk)
-                && aircraft.FlightPlanCallsign == aircraft.Squawk
-                && aircraft.Callsign != aircraft.Squawk)
-            {
-                aircraft.FlightPlanCallsign = aircraft.Callsign;
-                return;
-            }
 
             if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign))
             {

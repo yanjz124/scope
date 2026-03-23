@@ -36,6 +36,24 @@ namespace DGScope.ADSBBeaconReader
             new Dictionary<Aircraft, PositionMatch>();
         private int pollCount;
 
+        // SWIM-proof callsign cache: stores ADSB-discovered callsigns keyed by Aircraft reference.
+        // SWIM continuously overwrites Aircraft.Callsign and FlightPlanCallsign for LADD targets,
+        // so we need a separate store that the render loop can use to re-apply every frame.
+        private readonly Dictionary<Aircraft, string> adsbCallsignCache =
+            new Dictionary<Aircraft, string>();
+
+        /// <summary>
+        /// Try to get a cached ADSB callsign for an aircraft. Thread-safe.
+        /// Returns null if no cached callsign exists.
+        /// </summary>
+        public string GetCachedCallsign(Aircraft ac)
+        {
+            lock (adsbCallsignCache)
+            {
+                return adsbCallsignCache.TryGetValue(ac, out var cs) ? cs : null;
+            }
+        }
+
         private class PositionMatch
         {
             public string Callsign;
@@ -71,6 +89,8 @@ namespace DGScope.ADSBBeaconReader
             pollTimer = null;
             lock (positionMatches)
                 positionMatches.Clear();
+            lock (adsbCallsignCache)
+                adsbCallsignCache.Clear();
         }
 
         private void PollCallback(object state)
@@ -173,8 +193,11 @@ namespace DGScope.ADSBBeaconReader
                     var radarAc = kvp.Key;
                     var pm = kvp.Value;
 
-                    // If aircraft no longer has the callsign we assigned, someone else cleared it
-                    if (radarAc.Callsign != pm.Callsign)
+                    // If the cache no longer holds our callsign, someone else cleared it
+                    string cached;
+                    lock (adsbCallsignCache)
+                        adsbCallsignCache.TryGetValue(radarAc, out cached);
+                    if (cached != pm.Callsign)
                     {
                         if (toRemove == null) toRemove = new List<Aircraft>();
                         toRemove.Add(radarAc);
@@ -184,8 +207,7 @@ namespace DGScope.ADSBBeaconReader
                     // Find the ADSB target we matched against
                     if (!adsbByHex.TryGetValue(pm.AdsbHex, out var adsbAc))
                     {
-                        // ADSB target no longer in range — clear the callsign
-                        radarAc.Callsign = null;
+                        // ADSB target no longer in range — remove from cache
                         if (toRemove == null) toRemove = new List<Aircraft>();
                         toRemove.Add(radarAc);
                         continue;
@@ -199,8 +221,7 @@ namespace DGScope.ADSBBeaconReader
                         var dist = adsbPos.DistanceTo(radarAc.Location);
                         if (dist > RevalidateThresholdNM)
                         {
-                            // Positions have diverged — mismatch, clear callsign
-                            radarAc.Callsign = null;
+                            // Positions have diverged — mismatch, remove from cache
                             if (toRemove == null) toRemove = new List<Aircraft>();
                             toRemove.Add(radarAc);
                         }
@@ -211,6 +232,16 @@ namespace DGScope.ADSBBeaconReader
                 {
                     foreach (var ac in toRemove)
                         positionMatches.Remove(ac);
+                }
+            }
+
+            // Also remove from callsign cache for position-match removals
+            if (toRemove != null)
+            {
+                lock (adsbCallsignCache)
+                {
+                    foreach (var ac in toRemove)
+                        adsbCallsignCache.Remove(ac);
                 }
             }
         }
@@ -357,20 +388,19 @@ namespace DGScope.ADSBBeaconReader
                 }
             }
 
-            // Apply updates
+            // Apply updates and cache callsigns in SWIM-proof store
             Log($"Matched {updates.Count} of {byHex.Count} ADSB aircraft (radar targets: {snapshot.Count}, unmatched: {unmatched.Count})");
-            foreach (var update in updates)
+            lock (adsbCallsignCache)
             {
-                var ac = update.Key;
-                var cs = update.Value;
-                Log($"  {ac.Squawk}/{ac.ModeSCode:X6} -> {cs}");
-                ac.Callsign = cs;
-                // For LADD correlated aircraft: SWIM set FlightPlanCallsign to the
-                // squawk code. Replace it with the real callsign so the FDB displays
-                // like a normal correlated track.
-                if (!string.IsNullOrEmpty(ac.Squawk) && ac.FlightPlanCallsign == ac.Squawk)
+                foreach (var update in updates)
                 {
+                    var ac = update.Key;
+                    var cs = update.Value;
+                    Log($"  {ac.Squawk}/{ac.ModeSCode:X6} -> {cs}");
+                    ac.Callsign = cs;
                     ac.FlightPlanCallsign = cs;
+                    // Store in SWIM-proof cache so render loop can re-apply every frame
+                    adsbCallsignCache[ac] = cs;
                 }
             }
 
