@@ -5623,7 +5623,13 @@ namespace DGScope
         }
         private async Task ADSBtoFlightPlanCallsign(Aircraft aircraft)
         {
-            if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign) && !string.IsNullOrWhiteSpace(aircraft.Callsign))
+            if (string.IsNullOrWhiteSpace(aircraft.Callsign))
+                return;
+            // Allow overwrite if FlightPlanCallsign is empty, OR if it's a SWIM LADD aircraft
+            // where SWIM substituted the squawk code as the callsign
+            bool needsCallsign = string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign)
+                || (!string.IsNullOrEmpty(aircraft.Squawk) && aircraft.FlightPlanCallsign == aircraft.Squawk);
+            if (needsCallsign)
             {
                 var associated = aircraft.Associated;
                 if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
