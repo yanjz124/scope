@@ -93,9 +93,9 @@ jobs:
           Write-Host "Critical packages check:"
           foreach ($pkg in $criticalFound.Keys) {
             if ($criticalFound[$pkg]) {
-              Write-Host "  ✓ $pkg found" -ForegroundColor Green
+              Write-Host "  $pkg found" -ForegroundColor Green
             } else {
-              Write-Error "  ✗ $pkg - MISSING!"
+              Write-Error "  $pkg - MISSING!"
               exit 1
             }
           }
@@ -105,9 +105,9 @@ jobs:
           Write-Host "Checking for SharpZipLib DLL..."
           $sharpZipDll = Get-ChildItem ".\packages" -Recurse -Filter "ICSharpCode.SharpZipLib.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($sharpZipDll) {
-            Write-Host "  ✓ Found: $($sharpZipDll.FullName)"
+            Write-Host "  Found: $($sharpZipDll.FullName)"
           } else {
-            Write-Error "  ✗ ICSharpCode.SharpZipLib.dll not found in packages!"
+            Write-Error "  ICSharpCode.SharpZipLib.dll not found in packages!"
           }
 
           # Show directory structure of SharpZipLib package
@@ -162,7 +162,7 @@ jobs:
         if ($sharpZipDll) {
           $dest = ".\NexradDecoder\ICSharpCode.SharpZipLib.dll"
           Copy-Item $sharpZipDll.FullName $dest -Force
-          Write-Host "  ✓ Copied ICSharpCode.SharpZipLib.dll from $($sharpZipDll.DirectoryName) to NexradDecoder"
+          Write-Host "  Copied ICSharpCode.SharpZipLib.dll from $($sharpZipDll.DirectoryName) to NexradDecoder"
         } else {
           Write-Error "Could not find ICSharpCode.SharpZipLib.dll to copy!"
           exit 1
@@ -214,7 +214,7 @@ jobs:
               $targetPath = Join-Path $destination $_.Name
               if (-not (Test-Path $targetPath)) {
                 Copy-Item $_.FullName $destination -Force
-                Write-Host "  ✓ Copied $($_.Name)"
+                Write-Host "  Copied $($_.Name)"
               }
             }
         }
@@ -241,7 +241,7 @@ jobs:
         $zipPath = ".\release-output\$zipFileName"
         Compress-Archive -Path ".\scope\bin\Release\*" -DestinationPath $zipPath -CompressionLevel Optimal
         
-        Write-Host "✓ Created: $zipPath"
+        Write-Host "Created: $zipPath"
         
         # Verify the ZIP was created
         if (Test-Path $zipPath) {
@@ -249,28 +249,12 @@ jobs:
           Write-Host "ZIP file size: $([math]::Round($size, 2)) MB"
         }
     
-    - name: Install WiX Toolset
-      shell: pwsh
-      run: |
-        Write-Host "WiX Toolset installation skipped for now..."
-        Write-Host "✓ Skipping MSI build (focus on EXE and ZIP)"
-    
-    - name: Harvest files with WiX Heat
-      shell: pwsh
-      run: |
-        Write-Host "Skipping file harvesting (MSI build disabled)..."
-    
-    - name: Build MSI installer
-      shell: pwsh
-      run: |
-        Write-Host "MSI build skipped - using EXE and ZIP installers"
-    
     - name: Install Inno Setup
       shell: pwsh
       run: |
         Write-Host "Installing Inno Setup..."
         choco install innosetup -y
-        Write-Host "✓ Inno Setup installed"
+        Write-Host "Inno Setup installed"
     
     - name: Build Inno Setup EXE installer
       shell: pwsh
@@ -334,7 +318,7 @@ jobs:
         if ($exeFile) {
           $newName = "DGScope-Setup-v$version.exe"
           Copy-Item $exeFile.FullName ".\release-output\$newName"
-          Write-Host "✓ Created: $newName"
+          Write-Host "Created: $newName"
         } else {
           Write-Error "No EXE file found in installer-output directory!"
           exit 1
@@ -371,44 +355,34 @@ jobs:
         $version = "${{ steps.version.outputs.VERSION }}"
         $releaseNotes = @"
         # DGScope v$version
-        
+
         ## Download Options
-        
-        ### 🚀 Recommended for Most Users
-        **DGScope-Setup-v$version.exe** - Single-file installer (Inno Setup)
-        - Simple installation wizard
-        - Creates Start Menu and Desktop shortcuts
-        - Automatic uninstaller
-        
-        ### 🏢 Enterprise/IT Deployment
-        **DGScope-Setup-v$version.msi** - Windows Installer package
-        - MSI format for enterprise deployment
-        - Group Policy compatible
-        - Windows Installer features
-        
-        ### 📦 Portable Version
+
+        ### Installer (Recommended)
+        **DGScope-Setup-v$version.exe** - Inno Setup installer
+        - Installation wizard with Start Menu and Desktop shortcuts
+        - Automatic uninstaller included
+
+        ### Portable
         **DGScope-Portable-v$version.zip** - No installation required
-        - Extract and run
-        - Perfect for USB drives or temporary use
-        - No system changes
-        
+        - Extract and run anywhere
+
         ## System Requirements
-        - Windows 7 or later (64-bit recommended)
+        - Windows 10 or later (64-bit)
         - .NET Framework 4.7.2 or later
-        - Approximately 50 MB disk space
-        
-        ## Installation
-        1. Download your preferred installer/package
-        2. Run the installer (or extract the ZIP)
-        3. Launch DGScope from Start Menu or Desktop
-        
+
+        ## Update Instructions
+        1. Close DGScope if running
+        2. Run the new installer (it will replace the previous version), or extract the ZIP over the existing folder
+        3. Your profiles and settings are preserved in %LocalAppData%\DGScope Profile Manager
+
         ---
-        
-        📝 For issues or questions, please visit the [Issues](../../issues) page.
+
+        For issues or questions, visit the [Issues](../../issues) page.
         "@
         
         $releaseNotes | Out-File -FilePath ".\release-output\RELEASE_NOTES.md" -Encoding UTF8
-        Write-Host "✓ Release notes generated"
+        Write-Host "Release notes generated"
     
     - name: Verify release files before upload
       shell: pwsh
@@ -425,19 +399,19 @@ jobs:
         foreach ($file in $expectedFiles) {
           $path = ".\release-output\$file"
           if (Test-Path $path) {
-            Write-Host "✓ Found: $file" -ForegroundColor Green
+            Write-Host "  Found: $file" -ForegroundColor Green
           } else {
-            Write-Host "✗ Missing: $file" -ForegroundColor Red
+            Write-Host "  Missing: $file" -ForegroundColor Red
             $allExist = $false
           }
         }
-        
+
         if (-not $allExist) {
           Write-Error "Some expected files are missing!"
           exit 1
         }
-        
-        Write-Host "✓ All files verified" -ForegroundColor Green
+
+        Write-Host "All files verified" -ForegroundColor Green
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -457,7 +431,6 @@ jobs:
         prerelease: false
         files: |
           release-output/*.exe
-          release-output/*.msi
           release-output/*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
