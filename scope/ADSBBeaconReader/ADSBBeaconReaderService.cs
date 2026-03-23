@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
@@ -21,6 +22,14 @@ namespace DGScope.ADSBBeaconReader
         private const double RevalidateThresholdNM = 3.0;
         private const int AltitudeMatchThresholdFt = 500;
         private const int RevalidateIntervalPolls = 3;
+        private static readonly string LogPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DGScope Profile Manager", "adsb_beacon_reader.log");
+
+        private static void Log(string msg)
+        {
+            try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss} {msg}\r\n"); } catch { }
+        }
 
         // Track position-correlated assignments for re-validation
         private readonly Dictionary<Aircraft, PositionMatch> positionMatches =
@@ -93,6 +102,7 @@ namespace DGScope.ADSBBeaconReader
                     return;
 
                 var enabledSources = settings.Sources.Where(s => s.Enabled).ToList();
+                Log($"Poll - {enabledSources.Count} sources, HideLADD={settings.HideLADDCallsigns}");
                 var allResults = new List<ADSBv2Aircraft>();
 
                 foreach (var source in enabledSources)
@@ -273,6 +283,8 @@ namespace DGScope.ADSBBeaconReader
                 }
             }
 
+            Log($"Radar: {snapshot.Count} aircraft, {unmatched.Count} need callsign, {byModeS.Count} in ModeS index, {bySquawk.Count} unique squawks");
+
             // Match and collect updates
             var updates = new List<KeyValuePair<Aircraft, string>>();
             var newPositionMatches = new List<KeyValuePair<Aircraft, PositionMatch>>();
@@ -289,6 +301,7 @@ namespace DGScope.ADSBBeaconReader
 
                 Aircraft matched = null;
                 bool matchedByPosition = false;
+                string matchMethod = null;
 
                 // Primary match: by Mode S hex code (O(1) dictionary lookup)
                 if (!string.IsNullOrEmpty(adsbAc.Hex))
@@ -296,8 +309,8 @@ namespace DGScope.ADSBBeaconReader
                     try
                     {
                         int modeS = Convert.ToInt32(adsbAc.Hex, 16);
-                        if (modeS != 0)
-                            byModeS.TryGetValue(modeS, out matched);
+                        if (modeS != 0 && byModeS.TryGetValue(modeS, out matched))
+                            matchMethod = "hex";
                     }
                     catch { }
                 }
@@ -305,7 +318,8 @@ namespace DGScope.ADSBBeaconReader
                 // Secondary match: by squawk (O(1) dictionary lookup, already filtered to unique)
                 if (matched == null && !string.IsNullOrEmpty(adsbAc.Squawk))
                 {
-                    bySquawk.TryGetValue(adsbAc.Squawk, out matched);
+                    if (bySquawk.TryGetValue(adsbAc.Squawk, out matched))
+                        matchMethod = "squawk";
                 }
 
                 // Tertiary match: by approximate position and altitude
@@ -331,11 +345,22 @@ namespace DGScope.ADSBBeaconReader
                     }
                     matched = closest;
                     matchedByPosition = matched != null;
+                    if (matched != null)
+                        matchMethod = $"position({closestDist:F2}nm)";
                 }
 
                 bool callsignIsSquawk = matched != null && !string.IsNullOrEmpty(matched.Squawk)
                     && matched.Callsign == matched.Squawk;
-                if (matched != null && (string.IsNullOrEmpty(matched.Callsign) || callsignIsSquawk))
+                bool emptyCallsign = matched != null && string.IsNullOrEmpty(matched.Callsign);
+
+                if (matched != null)
+                {
+                    Log($"  ADSB {adsbAc.Hex}/{adsbAc.Squawk}/{callsign} -> matched via {matchMethod}, " +
+                        $"radar CS=\"{matched.Callsign}\" SQ=\"{matched.Squawk}\" FPC=\"{matched.FlightPlanCallsign}\" " +
+                        $"emptyCS={emptyCallsign} csIsSq={callsignIsSquawk} enrich={emptyCallsign || callsignIsSquawk}");
+                }
+
+                if (matched != null && (emptyCallsign || callsignIsSquawk))
                 {
                     updates.Add(new KeyValuePair<Aircraft, string>(matched, callsign));
                     unmatched.Remove(matched);
@@ -357,8 +382,12 @@ namespace DGScope.ADSBBeaconReader
             }
 
             // Apply updates
+            int laddCached = 0;
+            lock (laddCallsignCache) laddCached = laddCallsignCache.Count;
+            Log($"Applying {updates.Count} updates ({laddCached} in LADD cache)");
             foreach (var update in updates)
             {
+                Log($"  SET {update.Key.Squawk} -> CS=\"{update.Value}\"");
                 update.Key.Callsign = update.Value;
             }
 
