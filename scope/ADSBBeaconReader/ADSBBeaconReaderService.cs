@@ -293,7 +293,10 @@ namespace DGScope.ADSBBeaconReader
                     }
                 }
 
-                if (string.IsNullOrEmpty(ac.Callsign) && ac.Location != null
+                // Include aircraft with no callsign OR where SWIM set callsign=squawk (LADD pattern)
+                bool hasRealCallsign = !string.IsNullOrEmpty(ac.Callsign)
+                    && (string.IsNullOrEmpty(ac.Squawk) || ac.Callsign != ac.Squawk);
+                if (!hasRealCallsign && ac.Location != null
                     && (ac.Latitude != 0 || ac.Longitude != 0))
                 {
                     unmatched.Add(ac);
@@ -363,10 +366,11 @@ namespace DGScope.ADSBBeaconReader
 
                 // Enrich if:
                 // 1. Callsign is empty (normal uncorrelated target), OR
-                // 2. LADD not respected AND this is a LADD aircraft where SWIM
-                //    substituted the squawk as the callsign/FlightPlanCallsign
-                bool isSwimLADD = !settings.HideLADDCallsigns && isLADD
-                    && matched != null && !string.IsNullOrEmpty(matched.Squawk)
+                // 2. SWIM substituted the squawk as the callsign (LADD pattern:
+                //    Callsign == Squawk or FlightPlanCallsign == Squawk).
+                //    Don't require ADSB LADD flag — detect the pattern directly.
+                bool isSwimLADD = matched != null && !string.IsNullOrEmpty(matched.Squawk)
+                    && !settings.HideLADDCallsigns
                     && (matched.Callsign == matched.Squawk
                         || matched.FlightPlanCallsign == matched.Squawk);
 
