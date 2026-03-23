@@ -3341,7 +3341,7 @@ namespace DGScope
                         break;
                     case Key.B:
                         ADSBSettings.EnsureBuiltInSources();
-                        var adsbForm = new ADSBBeaconReaderForm(ADSBSettings);
+                        var adsbForm = new ADSBBeaconReaderForm(ADSBSettings, adsbService);
                         adsbForm.Show();
                         adsbForm.BringToFront();
                         adsbForm.Focus();
@@ -5625,8 +5625,8 @@ namespace DGScope
         {
             // LADD backfill from SWIM-proof cache: SWIM continuously overwrites
             // Callsign and FlightPlanCallsign to squawk for LADD aircraft.
-            // The ADSB service stores real callsigns in a cache that SWIM can't touch.
-            if (adsbService != null)
+            // Only applies when HideLADDCallsigns is off. The cache only contains LADD targets.
+            if (adsbService != null && !ADSBSettings.HideLADDCallsigns)
             {
                 var cachedCs = adsbService.GetCachedCallsign(aircraft);
                 if (cachedCs != null)

@@ -6,11 +6,13 @@ namespace DGScope.ADSBBeaconReader
     public partial class ADSBBeaconReaderForm : Form
     {
         private readonly ADSBBeaconReaderSettings settings;
+        private readonly ADSBBeaconReaderService service;
 
-        public ADSBBeaconReaderForm(ADSBBeaconReaderSettings settings)
+        public ADSBBeaconReaderForm(ADSBBeaconReaderSettings settings, ADSBBeaconReaderService service = null)
         {
             InitializeComponent();
             this.settings = settings;
+            this.service = service;
             this.KeyDown += ADSBBeaconReaderForm_KeyDown;
             this.KeyPreview = true;
             LoadSettings();
@@ -44,6 +46,8 @@ namespace DGScope.ADSBBeaconReader
         private void chkHideLADD_CheckedChanged(object sender, EventArgs e)
         {
             settings.HideLADDCallsigns = chkHideLADD.Checked;
+            // Instantly clear cached LADD callsigns so display updates immediately
+            service?.ClearCallsignCache();
         }
 
         private void numPollInterval_ValueChanged(object sender, EventArgs e)

@@ -54,6 +54,15 @@ namespace DGScope.ADSBBeaconReader
             }
         }
 
+        /// <summary>
+        /// Clear the LADD callsign cache. Call when HideLADDCallsigns changes.
+        /// </summary>
+        public void ClearCallsignCache()
+        {
+            lock (adsbCallsignCache)
+                adsbCallsignCache.Clear();
+        }
+
         private class PositionMatch
         {
             public string Callsign;
@@ -305,6 +314,7 @@ namespace DGScope.ADSBBeaconReader
 
             // Match and collect updates
             var updates = new List<KeyValuePair<Aircraft, string>>();
+            var laddUpdates = new HashSet<Aircraft>();
             var newPositionMatches = new List<KeyValuePair<Aircraft, PositionMatch>>();
 
             foreach (var adsbAc in byHex.Values)
@@ -380,6 +390,8 @@ namespace DGScope.ADSBBeaconReader
                 if (matched != null && needsEnrichment)
                 {
                     updates.Add(new KeyValuePair<Aircraft, string>(matched, callsign));
+                    if (isSwimLADD)
+                        laddUpdates.Add(matched);
                     unmatched.Remove(matched);
 
                     // Track position-correlated matches for re-validation
@@ -392,19 +404,21 @@ namespace DGScope.ADSBBeaconReader
                 }
             }
 
-            // Apply updates and cache callsigns in SWIM-proof store
-            Log($"Matched {updates.Count} of {byHex.Count} ADSB aircraft (radar targets: {snapshot.Count}, unmatched: {unmatched.Count})");
-            lock (adsbCallsignCache)
+            // Apply updates
+            Log($"Matched {updates.Count} of {byHex.Count} ADSB aircraft ({laddUpdates.Count} LADD, radar targets: {snapshot.Count}, unmatched: {unmatched.Count})");
+            foreach (var update in updates)
             {
-                foreach (var update in updates)
+                var ac = update.Key;
+                var cs = update.Value;
+                bool isLadd = laddUpdates.Contains(ac);
+                Log($"  {ac.Squawk}/{ac.ModeSCode:X6} -> {cs}{(isLadd ? " [LADD]" : "")}");
+                ac.Callsign = cs;
+                if (isLadd)
                 {
-                    var ac = update.Key;
-                    var cs = update.Value;
-                    Log($"  {ac.Squawk}/{ac.ModeSCode:X6} -> {cs}");
-                    ac.Callsign = cs;
+                    // LADD: also set FlightPlanCallsign and cache for per-frame re-apply
                     ac.FlightPlanCallsign = cs;
-                    // Store in SWIM-proof cache so render loop can re-apply every frame
-                    adsbCallsignCache[ac] = cs;
+                    lock (adsbCallsignCache)
+                        adsbCallsignCache[ac] = cs;
                 }
             }
 
