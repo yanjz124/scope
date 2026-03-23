@@ -330,13 +330,17 @@ namespace DGScope.ADSBBeaconReader
                     matchedByPosition = matched != null;
                 }
 
-                // Enrich if callsign is empty, or if it's a SWIM LADD aircraft
-                // (callsign == squawk, meaning SWIM substituted the transponder code)
-                // and the user has opted to not respect LADD
-                bool needsEnrichment = string.IsNullOrEmpty(matched?.Callsign)
-                    || (!settings.HideLADDCallsigns && isLADD
-                        && !string.IsNullOrEmpty(matched.Squawk)
-                        && matched.Callsign == matched.Squawk);
+                // Enrich if:
+                // 1. Callsign is empty (normal uncorrelated target), OR
+                // 2. LADD not respected AND this is a LADD aircraft where SWIM
+                //    substituted the squawk as the callsign/FlightPlanCallsign
+                bool isSwimLADD = !settings.HideLADDCallsigns && isLADD
+                    && matched != null && !string.IsNullOrEmpty(matched.Squawk)
+                    && (matched.Callsign == matched.Squawk
+                        || matched.FlightPlanCallsign == matched.Squawk);
+
+                bool needsEnrichment = (matched != null)
+                    && (string.IsNullOrEmpty(matched.Callsign) || isSwimLADD);
 
                 if (matched != null && needsEnrichment)
                 {
@@ -357,8 +361,17 @@ namespace DGScope.ADSBBeaconReader
             Log($"Matched {updates.Count} of {byHex.Count} ADSB aircraft (radar targets: {snapshot.Count}, unmatched: {unmatched.Count})");
             foreach (var update in updates)
             {
-                Log($"  {update.Key.Squawk}/{update.Key.ModeSCode:X6} -> {update.Value}");
-                update.Key.Callsign = update.Value;
+                var ac = update.Key;
+                var cs = update.Value;
+                Log($"  {ac.Squawk}/{ac.ModeSCode:X6} -> {cs}");
+                ac.Callsign = cs;
+                // For LADD correlated aircraft: SWIM set FlightPlanCallsign to the
+                // squawk code. Replace it with the real callsign so the FDB displays
+                // like a normal correlated track.
+                if (!string.IsNullOrEmpty(ac.Squawk) && ac.FlightPlanCallsign == ac.Squawk)
+                {
+                    ac.FlightPlanCallsign = cs;
+                }
             }
 
             // Record position matches for future re-validation
