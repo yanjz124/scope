@@ -4059,7 +4059,7 @@ namespace DGScope
             GL.Flush();
             window.SwapBuffers();
             fps = (int)(1f / e.Time);
-            if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200)
+            if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200 || (adsbService != null && ADSBSettings.AnyEnabled))
             {
                 lock(Aircraft)
                 {
@@ -5625,11 +5625,18 @@ namespace DGScope
         {
             if (string.IsNullOrWhiteSpace(aircraft.Callsign))
                 return;
-            // Allow overwrite if FlightPlanCallsign is empty, OR if it's a SWIM LADD aircraft
-            // where SWIM substituted the squawk code as the callsign
-            bool needsCallsign = string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign)
-                || (!string.IsNullOrEmpty(aircraft.Squawk) && aircraft.FlightPlanCallsign == aircraft.Squawk);
-            if (needsCallsign)
+
+            // LADD backfill: SWIM substituted squawk as FlightPlanCallsign.
+            // If we have a real callsign from ADSB (Callsign != Squawk), always fix it.
+            if (!string.IsNullOrEmpty(aircraft.Squawk)
+                && aircraft.FlightPlanCallsign == aircraft.Squawk
+                && aircraft.Callsign != aircraft.Squawk)
+            {
+                aircraft.FlightPlanCallsign = aircraft.Callsign;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign))
             {
                 var associated = aircraft.Associated;
                 if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
