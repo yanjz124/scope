@@ -387,8 +387,14 @@ namespace DGScope.ADSBBeaconReader
             Log($"Applying {updates.Count} updates ({laddCached} in LADD cache)");
             foreach (var update in updates)
             {
-                Log($"  SET {update.Key.Squawk} -> CS=\"{update.Value}\"");
-                update.Key.Callsign = update.Value;
+                var ac = update.Key;
+                var cs = update.Value;
+                Log($"  SET {ac.Squawk} -> CS=\"{cs}\" (FPC was \"{ac.FlightPlanCallsign}\")");
+                ac.Callsign = cs;
+                // Also set FlightPlanCallsign if empty or equal to squawk —
+                // FDB displays FlightPlanCallsign for correlated tracks.
+                if (string.IsNullOrEmpty(ac.FlightPlanCallsign) || ac.FlightPlanCallsign == ac.Squawk)
+                    ac.FlightPlanCallsign = cs;
             }
 
             // Record position matches for future re-validation

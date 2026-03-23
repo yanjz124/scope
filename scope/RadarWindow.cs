@@ -5639,7 +5639,15 @@ namespace DGScope
             if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign) && !string.IsNullOrWhiteSpace(aircraft.Callsign))
             {
                 var associated = aircraft.Associated;
-                if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
+
+                // ADSB-enriched LADD tracks: always copy Callsign to FlightPlanCallsign
+                // so FDB displays the real callsign instead of squawk
+                if (adsbService != null && !ADSBSettings.HideLADDCallsigns
+                    && aircraft.Callsign != aircraft.Squawk)
+                {
+                    aircraft.FlightPlanCallsign = aircraft.Callsign;
+                }
+                else if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
                 {
                     aircraft.FlightPlanCallsign = aircraft.Callsign;
                 }
