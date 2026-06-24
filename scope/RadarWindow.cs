@@ -1014,6 +1014,7 @@ namespace DGScope
                     {
                         item.HandedOff += Aircraft_HandedOff;
                         item.HandoffInitiated += Aircraft_HandoffInitiated;
+                        item.Transferred += Aircraft_Transferred;
                         item.OwnershipChange += Aircraft_OwnershipChange;
                         if (item.Altitude == null)
                             item.Altitude = new Altitude();
@@ -1027,6 +1028,7 @@ namespace DGScope
                         item.HandedOff -= Aircraft_HandedOff;
                         item.OwnershipChange -= Aircraft_OwnershipChange;
                         item.HandoffInitiated -= Aircraft_HandoffInitiated;
+                        item.Transferred -= Aircraft_Transferred;
 
                         DeletePlane(item, false);
                     }
@@ -1094,6 +1096,23 @@ namespace DGScope
         private void Aircraft_HandedOff(object sender, HandoffEventArgs e)
         {
             /*e.Aircraft.RedrawDataBlock(false);*/
+        }
+
+        // CRC STARS spec: when the receiving controller accepts your outbound
+        // handoff, the data block blinks white for 5 seconds, then stays white
+        // until you click. Stamp JustTransferredAt and turn on Flashing; the
+        // render loop's standard Flashing-clear branch is guarded to skip
+        // clearing while the 5s window is active. After 5s the next render
+        // pass clears it naturally.
+        private void Aircraft_Transferred(object sender, HandoffEventArgs e)
+        {
+            if (e.PositionFrom == ThisPositionIndicator)
+            {
+                e.Aircraft.JustTransferredAt = DateTime.UtcNow;
+                e.Aircraft.DataBlock.Flashing = true;
+                e.Aircraft.DataBlock2.Flashing = true;
+                e.Aircraft.DataBlock3.Flashing = true;
+            }
         }
 
         byte[] settingshash;
@@ -2728,6 +2747,18 @@ namespace DGScope
                 else if (plane.ForceQuickLook)
                 {
                     plane.ForceQuickLook = false;
+                }
+                // CRC STARS: first click during outbound-complete blink stops
+                // the flashing (data block stays white). Subsequent click hits
+                // the "Owned && PositionInd != me" branch below to go green.
+                else if (plane.DataBlock.Flashing && plane.Owned
+                    && plane.PositionInd != ThisPositionIndicator
+                    && plane.PendingHandoff != ThisPositionIndicator)
+                {
+                    plane.DataBlock.Flashing = false;
+                    plane.DataBlock2.Flashing = false;
+                    plane.DataBlock3.Flashing = false;
+                    plane.JustTransferredAt = DateTime.MinValue;
                 }
                 // acknowledge CA / MSAW / SPC / FMA track
                 // stop blinking Cancelled flight plan indicator
@@ -6197,7 +6228,8 @@ namespace DGScope
                     }
                 }
 
-                if (x.DataBlock.Flashing && x.PendingHandoff != ThisPositionIndicator)
+                if (x.DataBlock.Flashing && x.PendingHandoff != ThisPositionIndicator
+                    && (DateTime.UtcNow - x.JustTransferredAt) > TimeSpan.FromSeconds(5))
                 {
                     x.DataBlock.Flashing = false;
                     x.DataBlock2.Flashing = false;

@@ -32,7 +32,7 @@ namespace DGScope
         public TPACone? ATPACone { get; set; } = null;
         private double rateofturn;
         private string positionind;
-        public string PositionInd 
+        public string PositionInd
         {
             get => positionind;
             set
@@ -42,9 +42,25 @@ namespace DGScope
                     HandedOff?.Invoke(this, new HandoffEventArgs(this, value, pendinghandoff));
                     pendinghandoff = null;
                 }
+                // Fire Transferred whenever ownership actually changes from one
+                // controller to another (ignoring the initial null→value set).
+                // CRC STARS spec: after the receiver accepts your outbound, the
+                // data block blinks white for 5 seconds. HandedOff above only
+                // fires on UNEXPECTED transitions (new owner ≠ pending receiver),
+                // so it doesn't cover the standard accept case. RadarWindow
+                // subscribes to Transferred and drives the 5s flash from there.
+                if (value != positionind && !string.IsNullOrEmpty(positionind))
+                {
+                    Transferred?.Invoke(this, new HandoffEventArgs(this, value, positionind));
+                }
                 positionind = value;
             }
         }
+        // Stamped by RadarWindow.Aircraft_Transferred when an outbound handoff
+        // we initiated has just been accepted. The render loop's standard
+        // Flashing-clear branch (line ~6200) skips clearing while this window
+        // is active so the data block stays in blinking-white state for 5s.
+        public DateTime JustTransferredAt { get; set; } = DateTime.MinValue;
         private string pendinghandoff;
         public string PendingHandoff {
             get => pendinghandoff;
@@ -907,6 +923,9 @@ namespace DGScope
         public event EventHandler<UpdatePositionEventArgs> LocationUpdated;
         public event EventHandler<HandoffEventArgs> HandoffInitiated;
         public event EventHandler<HandoffEventArgs> HandedOff;
+        // Fires whenever PositionInd transitions from one non-null/non-empty
+        // value to another. Used for the CRC STARS outbound-complete blink.
+        public event EventHandler<HandoffEventArgs> Transferred;
         public event EventHandler Created;
         public event EventHandler<AircraftEventArgs> OwnershipChange;
         public event EventHandler Dropped;
