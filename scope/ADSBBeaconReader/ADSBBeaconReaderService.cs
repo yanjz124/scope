@@ -54,6 +54,11 @@ namespace DGScope.ADSBBeaconReader
             set.Add("7600"); // Radio failure
             set.Add("7700"); // Emergency
             set.Add("7777"); // Military intercept
+
+            // DC SFRA / FRZ codes (PCT allocation)
+            set.Add("1226"); // VFR direct to/from Leesburg JYO within SFRA
+            set.Add("5100"); // PCT SFRA allocation
+            set.Add("5200"); // PCT FRZ allocation
             return set;
         }
 

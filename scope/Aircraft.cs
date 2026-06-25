@@ -465,19 +465,23 @@ namespace DGScope
             {
                 if (!string.IsNullOrEmpty(FlightPlanCallsign) && !ShowCallsignWithNoSquawk)
                 {
+                    // VFR tracks are MSAW-inhibited, shown by an asterisk after the aircraft ID
+                    string acid = FlightPlanCallsign;
+                    if (!string.IsNullOrEmpty(FlightRules) && FlightRules[0] == 'V')
+                        acid += "*";
                     if (leaderDirection == LeaderDirection.W ||
                 leaderDirection == LeaderDirection.NW ||
                 leaderDirection == LeaderDirection.SW)
                     {
-                        DataBlock.Text = FlightPlanCallsign.PadLeft(9);
-                        DataBlock2.Text = FlightPlanCallsign.PadLeft(9); 
-                        DataBlock3.Text = FlightPlanCallsign.PadLeft(9);
+                        DataBlock.Text = acid.PadLeft(9);
+                        DataBlock2.Text = acid.PadLeft(9);
+                        DataBlock3.Text = acid.PadLeft(9);
                     }
                     else
                     {
-                        DataBlock.Text = FlightPlanCallsign.PadRight(9);
-                        DataBlock2.Text = FlightPlanCallsign.PadRight(9);
-                        DataBlock3.Text = FlightPlanCallsign.PadRight(9);
+                        DataBlock.Text = acid.PadRight(9);
+                        DataBlock2.Text = acid.PadRight(9);
+                        DataBlock3.Text = acid.PadRight(9);
                     }
                 }
                 else if (Squawk != null)
@@ -633,6 +637,8 @@ namespace DGScope
                 PositionIndicator.Text = PositionInd.Substring(PositionInd.Length - 1);
             else if (isSquawkSelected())
                 PositionIndicator.Text = selectedSquawkChar.ToString();
+            else if (Squawk == "1200")
+                PositionIndicator.Text = "V";
             else if (PrimaryOnly)
                 PositionIndicator.Text = "◇";
             else

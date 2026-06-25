@@ -390,6 +390,6 @@
   </PropertyGroup>
   <Import Project="..\packages\System.Text.Json.6.0.5\build\System.Text.Json.targets" Condition="Exists('..\packages\System.Text.Json.6.0.5\build\System.Text.Json.targets')" />
   <PropertyGroup>
-    <PreBuildEvent>cmd /c "(git describe --tags --dirty --always 2&gt;nul || git rev-parse --short HEAD 2&gt;nul || echo 0.0.0-untagged) &gt; $(ProjectDir)version.txt"</PreBuildEvent>
+    <PreBuildEvent>cmd /c "(git describe --tags --dirty --always 2&gt;nul || git rev-parse --short HEAD 2&gt;nul || echo 0.0.0-untagged) &gt; "$(ProjectDir)version.txt""</PreBuildEvent>
   </PropertyGroup>
 </Project>
