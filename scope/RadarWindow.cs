@@ -385,6 +385,9 @@ namespace DGScope
         public List<VideoMapFile> VideoMapFiles { get; set; } = new List<VideoMapFile>();
         [XmlIgnore]
         public ATPA ATPA = new ATPA();
+        public MSAW MSAW = new MSAW();
+        public ConflictAlertSystem ConflictAlert = new ConflictAlertSystem();
+        private readonly StarsSounds sounds = new StarsSounds();
         [DisplayName("Separation Table"), Category("ATPA")]
         public SeparationTable ATPASeparationTable
         {
@@ -429,6 +432,89 @@ namespace DGScope
         [DisplayName("Active 2.5 nm Approach Volumes"), Category("ATPA")]
         [XmlIgnore]
         public List<ATPAVolume> ActiveATPATwoPointFive { get; set; } = new List<ATPAVolume>();
+
+        [DisplayName("Active"), Description("MSAW (Minimum Safe Altitude Warning) active"), Category("MSAW")]
+        public bool MSAWActive
+        {
+            get => MSAW.Active;
+            set => MSAW.Active = value;
+        }
+        [DisplayName("Look-Ahead (sec)"), Description("Seconds to project a track forward when checking for an MSAW violation"), Category("MSAW")]
+        public int MSAWLookAheadSeconds
+        {
+            get => MSAW.LookAheadSeconds;
+            set => MSAW.LookAheadSeconds = value;
+        }
+        [DisplayName("Volumes"), Category("MSAW")]
+        public List<MSAWVolume> MSAWVolumes
+        {
+            get => MSAW.Volumes;
+            set => MSAW.Volumes = value;
+        }
+        [DisplayName("Draw MSAW Volumes"), Description("Draw all MSAW volume outlines on the scope, for testing."), Category("MSAW")]
+        public bool DrawAllMSAWVolumes { get; set; } = false;
+        [DisplayName("Aural Alert"), Description("Play the repeating MSAW aural alert while an unacknowledged low-altitude alert is active."), Category("MSAW")]
+        public bool MSAWSound { get; set; } = true;
+
+        [DisplayName("Active"), Description("Conflict Alert (CA/STCA) processing active."), Category("Conflict Alert")]
+        public bool ConflictAlertActive
+        {
+            get => ConflictAlert.Active;
+            set => ConflictAlert.Active = value;
+        }
+        [DisplayName("Look-Ahead (sec)"), Description("Seconds to project tracks forward when checking for a conflict."), Category("Conflict Alert")]
+        public int ConflictAlertLookAheadSeconds
+        {
+            get => ConflictAlert.LookAheadSeconds;
+            set => ConflictAlert.LookAheadSeconds = value;
+        }
+        [DisplayName("Horizontal Separation (NM)"), Category("Conflict Alert")]
+        public double ConflictAlertHorizontalSeparation
+        {
+            get => ConflictAlert.HorizontalSeparation;
+            set => ConflictAlert.HorizontalSeparation = value;
+        }
+        [DisplayName("Vertical Separation (ft)"), Category("Conflict Alert")]
+        public int ConflictAlertVerticalSeparation
+        {
+            get => ConflictAlert.VerticalSeparation;
+            set => ConflictAlert.VerticalSeparation = value;
+        }
+        [DisplayName("Suppression Volumes"), Description("Final-approach zones where conflict alerts are suppressed."), Category("Conflict Alert")]
+        public List<CASuppressionVolume> ConflictAlertSuppressionVolumes
+        {
+            get => ConflictAlert.SuppressionVolumes;
+            set => ConflictAlert.SuppressionVolumes = value;
+        }
+        [DisplayName("Draw Suppression Volumes"), Description("Draw all CA suppression zone outlines on the scope, for testing."), Category("Conflict Alert")]
+        public bool DrawAllCASuppressionVolumes { get; set; } = false;
+        [DisplayName("Aural Alert"), Description("Play the repeating conflict-alert tone while an unacknowledged CA is active."), Category("Conflict Alert")]
+        public bool ConflictAlertSound { get; set; } = true;
+        [DisplayName("Import Volumes From File"), Description("Select a vSTARS SystemVolume XML file to import MSAW volumes from. Imported volumes are appended to the Volumes list."), Category("MSAW")]
+        [Editor(typeof(System.Windows.Forms.Design.FileNameEditor), typeof(UITypeEditor))]
+        [XmlIgnore]
+        public string MSAWImportFile
+        {
+            get => "";
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    return;
+                try
+                {
+                    var imported = MSAWImporter.Import(value);
+                    lock (MSAW.Volumes)
+                        MSAW.Volumes.AddRange(imported);
+                    System.Windows.Forms.MessageBox.Show($"Imported {imported.Count} MSAW volume(s) from {value}.", "MSAW Import",
+                        System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.Forms.MessageBox.Show("Error importing " + value + "\r\n" + ex.Message, "MSAW Import",
+                        System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+                }
+            }
+        }
         float scale => (float)(CurrentPrefSet.Range); // Math.Sqrt(2));
         float pixelScale;
         //float xPixelScale;// => pixelScale; //2f / window.ClientSize.Width;
@@ -684,6 +770,9 @@ namespace DGScope
         [Browsable(false)]
         public PointF StatusLocation
         { get; set; }
+        [DisplayName("Show LA/CA/MCI List"), Description("Display the LA/CA/MCI list of tracks in alert status."), Category("MSAW")]
+        public bool ShowLACAMCIList { get; set; } = true;
+        public PointF LACAMCIListLocation { get; set; } = new PointF(20, 100);
         [DisplayName("Wind in Status Area"), Description("Show wind values in Status Area"), Category("Display Properties")]
         public bool WindInStatusArea { get; set; } = false;
         [DisplayName("FPS in Status Area"), Description("Show FPS in Status Area"), Category("Display Properties")]
@@ -745,6 +834,11 @@ namespace DGScope
             AutoSize = true
         };
         private TransparentLabel StatusArea = new TransparentLabel()
+        {
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true
+        };
+        private TransparentLabel LACAMCIListArea = new TransparentLabel()
         {
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
@@ -2339,8 +2433,52 @@ namespace DGScope
                                     Preview.Clear();
                                 }
                                 break;
+                            case 'V': // Multifunction V: MSAW processing
+                                if (clickedplane && keys[0].Length == 2)
+                                {
+                                    // F7 V <slew>: toggle MSAW processing for a track
+                                    var plane = clicked as Aircraft;
+                                    plane.MSAWInhibited = !plane.MSAWInhibited;
+                                    Preview.Clear();
+                                }
+                                else if (enter && keys[0].Length == 4
+                                    && keys[0][2].GetType() == typeof(char) && (char)keys[0][2] == 'M'
+                                    && keys[0][3].GetType() == typeof(char))
+                                {
+                                    // F7 VME / VMI: enable/inhibit MSAW system-wide
+                                    char mode = (char)keys[0][3];
+                                    if (mode == 'E')
+                                    {
+                                        MSAW.Active = true;
+                                        Preview.Clear();
+                                    }
+                                    else if (mode == 'I')
+                                    {
+                                        MSAW.Active = false;
+                                        Preview.Clear();
+                                    }
+                                    else
+                                    {
+                                        DisplayPreviewMessage("FORMAT");
+                                    }
+                                }
+                                break;
                             case 'Q':
-                                if ((keys[0].Length >= 4 || keys[0].Length <= 6) && enter)
+                                if (clickedplane && keys[0].Length == 2)
+                                {
+                                    // F7 Q <slew>: inhibit MSAW for a track currently in MSAW alert
+                                    var plane = clicked as Aircraft;
+                                    if (plane.LowAltitude)
+                                    {
+                                        plane.MSAWInhibited = true;
+                                        Preview.Clear();
+                                    }
+                                    else
+                                    {
+                                        DisplayPreviewMessage("ILL TRK");
+                                    }
+                                }
+                                else if ((keys[0].Length >= 4 || keys[0].Length <= 6) && enter)
                                 {
                                     var qlstring = KeysToString(keys[0]).Substring(1);
                                     bool qlplus = false;
@@ -2727,6 +2865,26 @@ namespace DGScope
             if (clickedplane)
             {
                 var plane = clicked as Aircraft;
+                // Acknowledge an unacknowledged MSAW low-altitude alert (silences tone).
+                if (plane.LowAltitude && !plane.LowAltitudeAcknowledged)
+                {
+                    plane.LowAltitudeAcknowledged = true;
+                    plane.RedrawDataBlock(radar);
+                    return;
+                }
+                // Acknowledge a conflict alert: silences the tone and makes the CA solid
+                // on both tracks of the pair (slewing either track acknowledges it).
+                if (plane.ConflictAlert && !plane.ConflictAlertAcknowledged)
+                {
+                    plane.ConflictAlertAcknowledged = true;
+                    foreach (var partner in plane.ConflictingTracks.ToList())
+                    {
+                        partner.ConflictAlertAcknowledged = true;
+                        partner.RedrawDataBlock(radar);
+                    }
+                    plane.RedrawDataBlock(radar);
+                    return;
+                }
                 // Accept Handoff, Recall handoff
                 if (plane.PendingHandoff == ThisPositionIndicator)
                 {
@@ -3079,6 +3237,52 @@ namespace DGScope
             }
             StatusArea.LocationF = new PointF(StatusLocation.X, StatusLocation.Y - StatusArea.SizeF.Height);
             DrawLabel(StatusArea);
+        }
+
+        private static string LACAMCIId(Aircraft ac)
+        {
+            if (!string.IsNullOrEmpty(ac.FlightPlanCallsign))
+                return ac.FlightPlanCallsign;
+            return !string.IsNullOrEmpty(ac.Squawk) ? ac.Squawk : "----";
+        }
+        private void RenderLACAMCIList()
+        {
+            if (!ShowLACAMCIList)
+                return;
+            List<Aircraft> tracks;
+            lock (Aircraft)
+                tracks = Aircraft.Where(x => !x.Deleted && (x.LowAltitude || x.ConflictAlert)).ToList();
+            if (tracks.Count == 0)
+                return;
+            // Per vSTARS, an unassociated alert track shows its reported beacon code
+            // in place of the callsign (an MCI rather than a CA when one of a pair).
+            string text = "LA/CA/MCI\r\n";
+            foreach (var ac in tracks.Where(x => x.LowAltitude))
+            {
+                int hundreds = ac.TrueAltitude / 100;
+                text += $"LA {LACAMCIId(ac)} {hundreds:000}\r\n";
+            }
+            var shownPairs = new HashSet<string>();
+            foreach (var ac in tracks.Where(x => x.ConflictAlert))
+            {
+                foreach (var partner in ac.ConflictingTracks.ToList())
+                {
+                    var ids = new[] { ac.TrackGuid.ToString(), partner.TrackGuid.ToString() };
+                    Array.Sort(ids);
+                    string key = string.Join("|", ids);
+                    if (!shownPairs.Add(key))
+                        continue;
+                    // CA when both associated; MCI if either is unassociated.
+                    string label = (string.IsNullOrEmpty(ac.FlightPlanCallsign) || string.IsNullOrEmpty(partner.FlightPlanCallsign)) ? "MCI" : "CA";
+                    text += $"{label} {LACAMCIId(ac)} {LACAMCIId(partner)}\r\n";
+                }
+            }
+            LACAMCIListArea.ForeColor = AdjustedColor(DataBlockColor, CurrentPrefSet.Brightness.Lists);
+            LACAMCIListArea.Font = Font;
+            LACAMCIListArea.Text = text;
+            LACAMCIListArea.ForceRedraw();
+            LACAMCIListArea.LocationF = new PointF(LACAMCIListLocation.X, LACAMCIListLocation.Y);
+            DrawLabel(LACAMCIListArea);
         }
 
         private string ToFilterAltitudeString(int altitude)
@@ -4083,6 +4287,20 @@ namespace DGScope
                 ATPA.Calculate(Aircraft, radar);
                 DrawATPAVolumes();
             }
+            if (MSAW.Active)
+            {
+                MSAW.Calculate(Aircraft, radar);
+                if (DrawAllMSAWVolumes)
+                    DrawMSAWVolumes();
+            }
+            sounds.SetMsaw(MSAWSound && MSAW.Active && MSAW.UnacknowledgedAlert);
+            if (ConflictAlert.Active)
+            {
+                ConflictAlert.Calculate(Aircraft, radar);
+                if (DrawAllCASuppressionVolumes)
+                    DrawCASuppressionVolumes();
+            }
+            sounds.SetConflictAlert(ConflictAlertSound && ConflictAlert.Active && ConflictAlert.UnacknowledgedAlert);
             GenerateTargets();
             DrawTargets();
             DrawMinSeps();
@@ -4921,6 +5139,45 @@ namespace DGScope
                 DrawLine(l4, Color.Aqua);
             }
         }
+        private void DrawMSAWVolumes()
+        {
+            List<MSAWVolume> volumes;
+            lock (MSAW.Volumes)
+                volumes = MSAW.Volumes.Where(v => v.Draw || DrawAllMSAWVolumes).ToList();
+            foreach (var volume in volumes)
+            {
+                var pts = volume.Points;
+                if (pts == null || pts.Count < 2)
+                    continue;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var a = pts[i];
+                    var b = pts[(i + 1) % pts.Count];
+                    DrawLine(new Line(a, b), Color.Red);
+                }
+            }
+        }
+        private void DrawCASuppressionVolumes()
+        {
+            List<CASuppressionVolume> volumes;
+            lock (ConflictAlert.SuppressionVolumes)
+                volumes = ConflictAlert.SuppressionVolumes.Where(v => v.Draw || DrawAllCASuppressionVolumes).ToList();
+            foreach (var v in volumes)
+            {
+                if (v.RunwayThreshold == null)
+                    continue;
+                double centerline = (v.TrueHeading + 180) % 360;
+                var nearLeft = v.RunwayThreshold.FromPoint(v.HalfWidth, centerline - 90);
+                var nearRight = v.RunwayThreshold.FromPoint(v.HalfWidth, centerline + 90);
+                var farCenter = v.RunwayThreshold.FromPoint(v.Length, centerline);
+                var farLeft = farCenter.FromPoint(v.HalfWidth, centerline - 90);
+                var farRight = farCenter.FromPoint(v.HalfWidth, centerline + 90);
+                DrawLine(new Line(nearLeft, farLeft), Color.Yellow);
+                DrawLine(new Line(farLeft, farRight), Color.Yellow);
+                DrawLine(new Line(farRight, nearRight), Color.Yellow);
+                DrawLine(new Line(nearRight, nearLeft), Color.Yellow);
+            }
+        }
         private void DrawMinSeps()
         {
             List<MinSep> seps;
@@ -5040,6 +5297,7 @@ namespace DGScope
         {
             RenderPreview();
             RenderStatus();
+            RenderLACAMCIList();
         }
         private void Window_Load(object sender, EventArgs e)
         {
@@ -5464,7 +5722,7 @@ namespace DGScope
                 if (aircraft.Deleted)
                     return;
                 var oldcolor = aircraft.DataBlock.ForeColor;
-                if (aircraft.Emergency)
+                if (aircraft.Emergency || aircraft.LowAltitude || aircraft.ConflictAlert)
                 {
                     aircraft.DataBlock.ForeColor = DataBlockEmergencyColor;
                     aircraft.DataBlock2.ForeColor = DataBlockEmergencyColor;

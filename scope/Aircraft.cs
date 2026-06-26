@@ -97,6 +97,24 @@ namespace DGScope
         public bool IsOnGround { get; set; }
         public bool Emergency { get; set; }
         public bool Alert { get; set; }
+        // MSAW low-altitude alert. LowAltitude is set by the MSAW engine; once the
+        // controller slews the track, LowAltitudeAcknowledged silences the tone.
+        public bool LowAltitude { get; set; }
+        public bool LowAltitudeAcknowledged { get; set; }
+        // Per-track MSAW processing inhibit (F7 V <slew> / F7 Q <slew>).
+        public bool MSAWInhibited { get; set; }
+        // True when MSAW is inhibited for this track for any reason (automatic VFR
+        // inhibit or a manual inhibit). Drives both the MSAW engine and the "*"
+        // shown after the aircraft ID.
+        public bool IsMSAWInhibited =>
+            MSAWInhibited || (!string.IsNullOrEmpty(FlightRules) && FlightRules[0] == 'V');
+        // Conflict Alert (CA/STCA). ConflictAlert is set by the CA engine; once a
+        // controller slews either track, ConflictAlertAcknowledged silences the tone
+        // and makes the "CA" solid. ConflictingTracks is the current set of partners
+        // (rebuilt each pass) so acknowledging one track acknowledges the pair.
+        public bool ConflictAlert { get; set; }
+        public bool ConflictAlertAcknowledged { get; set; }
+        public List<Aircraft> ConflictingTracks { get; } = new List<Aircraft>();
         public DateTime LastMessageTime { get; set; }
         public DateTime LastPositionTime { get { return lastLocationSetTime; } }
         public Color TargetColor { get { return TargetReturn.ForeColor; } set { TargetReturn.ForeColor = value; } }
@@ -465,9 +483,11 @@ namespace DGScope
             {
                 if (!string.IsNullOrEmpty(FlightPlanCallsign) && !ShowCallsignWithNoSquawk)
                 {
-                    // VFR tracks are MSAW-inhibited, shown by an asterisk after the aircraft ID
+                    // An asterisk after the aircraft ID marks an MSAW-inhibited track:
+                    // VFR tracks are automatically inhibited, plus any manual inhibit
+                    // (F7 V/Q <slew>).
                     string acid = FlightPlanCallsign;
-                    if (!string.IsNullOrEmpty(FlightRules) && FlightRules[0] == 'V')
+                    if (IsMSAWInhibited)
                         acid += "*";
                     if (leaderDirection == LeaderDirection.W ||
                 leaderDirection == LeaderDirection.NW ||
@@ -633,6 +653,33 @@ namespace DGScope
                 }
             }
 
+            // Alert indicators time-share with the ACID on the first line of the FDB
+            // (phases 0/2 show the indicator, phase 1 keeps the ACID, so it blinks).
+            if ((LowAltitude || ConflictAlert) && FDB)
+            {
+                bool leftJust = leaderDirection == LeaderDirection.W ||
+                    leaderDirection == LeaderDirection.NW ||
+                    leaderDirection == LeaderDirection.SW;
+                // MSAW (LA): time-shares with the ACID for as long as the alert is
+                // active; per vSTARS, acknowledging only silences the tone.
+                if (LowAltitude)
+                {
+                    string la = leftJust ? "LA".PadLeft(9) : "LA".PadRight(9);
+                    SetFirstLine(DataBlock, la);
+                    SetFirstLine(DataBlock3, la);
+                }
+                // Conflict Alert (CA) takes precedence: per CRC STARS, "CA" blinks red
+                // until acknowledged, then displays solid red.
+                if (ConflictAlert)
+                {
+                    string ca = leftJust ? "CA".PadLeft(9) : "CA".PadRight(9);
+                    SetFirstLine(DataBlock, ca);
+                    SetFirstLine(DataBlock3, ca);
+                    if (ConflictAlertAcknowledged)
+                        SetFirstLine(DataBlock2, ca);
+                }
+            }
+
             if (!string.IsNullOrEmpty(PositionInd))
                 PositionIndicator.Text = PositionInd.Substring(PositionInd.Length - 1);
             else if (isSquawkSelected())
@@ -643,6 +690,18 @@ namespace DGScope
                 PositionIndicator.Text = "◇";
             else
                 PositionIndicator.Text = "*";
+        }
+
+        private static void SetFirstLine(TransparentLabel label, string firstLine)
+        {
+            var parts = label.Text.Split(new[] { "\r\n" }, StringSplitOptions.None);
+            if (parts.Length <= 1)
+            {
+                label.Text = firstLine;
+                return;
+            }
+            parts[0] = firstLine;
+            label.Text = string.Join("\r\n", parts);
         }
 
         private List<string> selectedSquawks;
