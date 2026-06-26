@@ -385,7 +385,9 @@ namespace DGScope
         public List<VideoMapFile> VideoMapFiles { get; set; } = new List<VideoMapFile>();
         [XmlIgnore]
         public ATPA ATPA = new ATPA();
+        [XmlIgnore]
         public MSAW MSAW = new MSAW();
+        [XmlIgnore]
         public ConflictAlertSystem ConflictAlert = new ConflictAlertSystem();
         private readonly StarsSounds sounds = new StarsSounds();
         [DisplayName("Separation Table"), Category("ATPA")]
@@ -450,6 +452,12 @@ namespace DGScope
         {
             get => MSAW.Volumes;
             set => MSAW.Volumes = value;
+        }
+        [DisplayName("Suppression Volumes"), Description("Polygon/circle zones where MSAW is suppressed (e.g. over an airport or along an approach path)."), Category("MSAW")]
+        public List<MSAWVolume> MSAWSuppressionVolumes
+        {
+            get => MSAW.SuppressionVolumes;
+            set => MSAW.SuppressionVolumes = value;
         }
         [DisplayName("Draw MSAW Volumes"), Description("Draw all MSAW volume outlines on the scope, for testing."), Category("MSAW")]
         public bool DrawAllMSAWVolumes { get; set; } = false;
@@ -5145,16 +5153,23 @@ namespace DGScope
             lock (MSAW.Volumes)
                 volumes = MSAW.Volumes.Where(v => v.Draw || DrawAllMSAWVolumes).ToList();
             foreach (var volume in volumes)
+                DrawMSAWVolumeOutline(volume, Color.Red);
+            List<MSAWVolume> suppression;
+            lock (MSAW.SuppressionVolumes)
+                suppression = MSAW.SuppressionVolumes.Where(v => v.Draw || DrawAllMSAWVolumes).ToList();
+            foreach (var volume in suppression)
+                DrawMSAWVolumeOutline(volume, Color.Lime);
+        }
+        private void DrawMSAWVolumeOutline(MSAWVolume volume, Color color)
+        {
+            var pts = volume.Points;
+            if (pts == null || pts.Count < 2)
+                return;
+            for (int i = 0; i < pts.Count; i++)
             {
-                var pts = volume.Points;
-                if (pts == null || pts.Count < 2)
-                    continue;
-                for (int i = 0; i < pts.Count; i++)
-                {
-                    var a = pts[i];
-                    var b = pts[(i + 1) % pts.Count];
-                    DrawLine(new Line(a, b), Color.Red);
-                }
+                var a = pts[i];
+                var b = pts[(i + 1) % pts.Count];
+                DrawLine(new Line(a, b), color);
             }
         }
         private void DrawCASuppressionVolumes()
