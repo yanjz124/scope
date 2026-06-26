@@ -15,7 +15,8 @@ namespace DGScope
         private readonly SoundPlayer msaw;
         private readonly SoundPlayer mci;
         private readonly SoundPlayer conflictAlert;
-        private bool msawPlaying, mciPlaying, caPlaying;
+        private readonly SoundPlayer specialCode;
+        private bool msawPlaying, mciPlaying, caPlaying, spcPlaying;
         private readonly object sync = new object();
 
         public StarsSounds()
@@ -23,6 +24,7 @@ namespace DGScope
             msaw = Load("DGScope.Sounds.Msaw.wav");
             mci = Load("DGScope.Sounds.Mci.wav");
             conflictAlert = Load("DGScope.Sounds.ConflictAlert.wav");
+            specialCode = Load("DGScope.Sounds.SpecialCode.wav");
         }
 
         private static SoundPlayer Load(string resourceName)
@@ -38,6 +40,7 @@ namespace DGScope
         public void SetMsaw(bool active) => Set(msaw, active, ref msawPlaying);
         public void SetMci(bool active) => Set(mci, active, ref mciPlaying);
         public void SetConflictAlert(bool active) => Set(conflictAlert, active, ref caPlaying);
+        public void SetSpecialCode(bool active) => Set(specialCode, active, ref spcPlaying);
 
         private void Set(SoundPlayer player, bool active, ref bool playing)
         {
@@ -63,6 +66,7 @@ namespace DGScope
             msaw?.Dispose();
             mci?.Dispose();
             conflictAlert?.Dispose();
+            specialCode?.Dispose();
         }
     }
 }

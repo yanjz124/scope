@@ -339,6 +339,7 @@
     <EmbeddedResource Include="Sounds\Msaw.wav" />
     <EmbeddedResource Include="Sounds\Mci.wav" />
     <EmbeddedResource Include="Sounds\ConflictAlert.wav" />
+    <EmbeddedResource Include="Sounds\SpecialCode.wav" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

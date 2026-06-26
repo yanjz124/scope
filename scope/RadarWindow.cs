@@ -851,6 +851,16 @@ namespace DGScope
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
         };
+        private TransparentLabel SSAAlertRed = new TransparentLabel()
+        {
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true
+        };
+        private TransparentLabel SSAAlertYellow = new TransparentLabel()
+        {
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true
+        };
         public RadarWindow(GameWindow Window)
         {
             window = Window;
@@ -1621,6 +1631,23 @@ namespace DGScope
                 }
                 if (keys[0].Length < 1)
                     return;
+                // Manual SPC/alert tag: type a 2-letter code and slew a track to toggle it.
+                if (clickedplane && keys.Length == 1)
+                {
+                    var spcCode = KeysToString(keys[0]).Trim().ToUpperInvariant();
+                    string[] spcCodes = { "HJ", "RF", "EM", "MI", "LL", "OD", "ME", "MF", "LN" };
+                    if (spcCodes.Contains(spcCode))
+                    {
+                        var spcPlane = clicked as Aircraft;
+                        if (spcPlane.ManualAlertCodes.Contains(spcCode))
+                            spcPlane.ManualAlertCodes.Remove(spcCode);
+                        else
+                            spcPlane.ManualAlertCodes.Add(spcCode);
+                        lock (spcPlane) spcPlane.RedrawDataBlock(radar);
+                        Preview.Clear();
+                        return;
+                    }
+                }
                 switch (keys[0][0])
                 {
                     case '1' when keys[0].Length == 1:
@@ -2873,22 +2900,24 @@ namespace DGScope
             if (clickedplane)
             {
                 var plane = clicked as Aircraft;
-                // Acknowledge an unacknowledged MSAW low-altitude alert (silences tone).
-                if (plane.LowAltitude && !plane.LowAltitudeAcknowledged)
+                // Acknowledge alerts on this track (MSAW LA, Conflict Alert, and the
+                // squawk-derived SPC): a slew silences the tone(s); CA goes solid.
+                bool unackedLA = plane.LowAltitude && !plane.LowAltitudeAcknowledged;
+                bool unackedCA = plane.ConflictAlert && !plane.ConflictAlertAcknowledged;
+                bool unackedSpc = plane.HasUnacknowledgedSpc;
+                if (unackedLA || unackedCA || unackedSpc)
                 {
-                    plane.LowAltitudeAcknowledged = true;
-                    plane.RedrawDataBlock(radar);
-                    return;
-                }
-                // Acknowledge a conflict alert: silences the tone and makes the CA solid
-                // on both tracks of the pair (slewing either track acknowledges it).
-                if (plane.ConflictAlert && !plane.ConflictAlertAcknowledged)
-                {
-                    plane.ConflictAlertAcknowledged = true;
-                    foreach (var partner in plane.ConflictingTracks.ToList())
+                    if (plane.LowAltitude)
+                        plane.LowAltitudeAcknowledged = true;
+                    plane.SpcAcknowledged = true;
+                    if (unackedCA)
                     {
-                        partner.ConflictAlertAcknowledged = true;
-                        partner.RedrawDataBlock(radar);
+                        plane.ConflictAlertAcknowledged = true;
+                        foreach (var partner in plane.ConflictingTracks.ToList())
+                        {
+                            partner.ConflictAlertAcknowledged = true;
+                            partner.RedrawDataBlock(radar);
+                        }
                     }
                     plane.RedrawDataBlock(radar);
                     return;
@@ -4309,6 +4338,10 @@ namespace DGScope
                     DrawCASuppressionVolumes();
             }
             sounds.SetConflictAlert(ConflictAlertSound && ConflictAlert.Active && ConflictAlert.UnacknowledgedAlert);
+            bool anyUnackedSpc;
+            lock (Aircraft)
+                anyUnackedSpc = Aircraft.Any(x => !x.Deleted && x.HasUnacknowledgedSpc);
+            sounds.SetSpecialCode(anyUnackedSpc);
             GenerateTargets();
             DrawTargets();
             DrawMinSeps();
@@ -5313,6 +5346,42 @@ namespace DGScope
             RenderPreview();
             RenderStatus();
             RenderLACAMCIList();
+            RenderSSAAlertCodes();
+        }
+        private void RenderSSAAlertCodes()
+        {
+            List<Aircraft> acs;
+            lock (Aircraft)
+                acs = Aircraft.Where(x => !x.Deleted).ToList();
+            // SPC codes active anywhere in the system (CA/LA live in the LA/CA/MCI list).
+            string[] redOrder = { "HJ", "RF", "EM", "LL", "MI" };
+            string[] yellowOrder = { "OD", "ME", "MF", "LN" };
+            var red = redOrder.Where(c => acs.Any(a => a.ActiveRedCodes.Contains(c))).ToArray();
+            var yellow = yellowOrder.Where(c => acs.Any(a => a.ActiveYellowCodes.Contains(c))).ToArray();
+            if (red.Length == 0 && yellow.Length == 0)
+                return;
+            string redText = string.Join(" ", red);
+            string yellowText = string.Join(" ", yellow);
+            if (red.Length > 0 && yellow.Length > 0)
+                redText += " ";
+            SSAAlertRed.Font = Font;
+            SSAAlertYellow.Font = Font;
+            SSAAlertRed.Text = redText;
+            SSAAlertYellow.Text = yellowText;
+            SSAAlertRed.ForeColor = AdjustedColor(DataBlockEmergencyColor, CurrentPrefSet.Brightness.Lists);
+            SSAAlertYellow.ForeColor = AdjustedColor(Color.Yellow, CurrentPrefSet.Brightness.Lists);
+            // One line directly above the Status Area block.
+            float y = StatusLocation.Y;
+            if (!string.IsNullOrEmpty(redText))
+            {
+                SSAAlertRed.LocationF = new PointF(StatusLocation.X, y);
+                DrawLabel(SSAAlertRed);
+            }
+            if (!string.IsNullOrEmpty(yellowText))
+            {
+                SSAAlertYellow.LocationF = new PointF(StatusLocation.X + SSAAlertRed.SizeF.Width, y);
+                DrawLabel(SSAAlertYellow);
+            }
         }
         private void Window_Load(object sender, EventArgs e)
         {
@@ -5737,13 +5806,9 @@ namespace DGScope
                 if (aircraft.Deleted)
                     return;
                 var oldcolor = aircraft.DataBlock.ForeColor;
-                if (aircraft.Emergency || aircraft.LowAltitude || aircraft.ConflictAlert)
-                {
-                    aircraft.DataBlock.ForeColor = DataBlockEmergencyColor;
-                    aircraft.DataBlock2.ForeColor = DataBlockEmergencyColor;
-                    aircraft.DataBlock3.ForeColor = DataBlockEmergencyColor;
-                }
-                else if (aircraft.Marked)
+                // Alerts/SPCs no longer recolor the tag; they show on a separate
+                // red/yellow line above the data block (set up below).
+                if (aircraft.Marked)
                 {
                     aircraft.DataBlock.ForeColor = SelectedColor;
                     aircraft.DataBlock2.ForeColor = SelectedColor;
@@ -5784,6 +5849,19 @@ namespace DGScope
                 aircraft.DataBlock.LocationF = OffsetDatablockLocation(aircraft);
                 aircraft.DataBlock2.LocationF = aircraft.DataBlock.LocationF;
                 aircraft.DataBlock3.LocationF = aircraft.DataBlock.LocationF;
+                // Alert/SPC line above the data block (red CA/LA/HJ/RF/EM/MI/LL +
+                // yellow OD/ME/MF/LN). Two labels; positioned/blinked in the draw loop.
+                aircraft.UpdateAlertCodes();
+                string redText = string.Join("/", aircraft.ActiveRedCodes);
+                string yellowText = string.Join("/", aircraft.ActiveYellowCodes);
+                if (!string.IsNullOrEmpty(redText) && !string.IsNullOrEmpty(yellowText))
+                    redText += "/"; // connect the two colored segments
+                aircraft.AlertLabelRed.Text = redText;
+                aircraft.AlertLabelYellow.Text = yellowText;
+                aircraft.AlertLabelRed.ForeColor = DataBlockEmergencyColor;
+                aircraft.AlertLabelYellow.ForeColor = Color.Yellow;
+                aircraft.AlertLabelRed.ParentAircraft = aircraft;
+                aircraft.AlertLabelYellow.ParentAircraft = aircraft;
                 if (!dataBlocks.Contains(aircraft.DataBlock))
                 {
                     lock (dataBlocks)
@@ -6603,6 +6681,7 @@ namespace DGScope
                         DrawLabel(block.ParentAircraft.DataBlock2);
                     else if (ClockPhase.Phase == 2)
                         DrawLabel(block.ParentAircraft.DataBlock3);
+                    DrawAlertLine(block.ParentAircraft);
                 }
             }
             lock (posIndicators)
@@ -6613,6 +6692,38 @@ namespace DGScope
                     if (x.ParentAircraft.FDB && acSet.Contains(x.ParentAircraft))
                         DrawLabel(x);
                 }
+            }
+        }
+        private void DrawAlertLine(Aircraft ac)
+        {
+            if (ac == null || !ac.HasAnyAlertCode)
+                return;
+            var db = ac.DataBlock;
+            bool hasRed = !string.IsNullOrEmpty(ac.AlertLabelRed.Text);
+            bool hasYellow = !string.IsNullOrEmpty(ac.AlertLabelYellow.Text);
+            if (!hasRed && !hasYellow)
+                return;
+            float redW = ac.AlertLabelRed.SizeF.Width;
+            float yelW = ac.AlertLabelYellow.SizeF.Width;
+            // Sits directly above the first data-block line (LocationF is bottom-left).
+            float top = db.LocationF.Y + db.SizeF.Height;
+            var dir = ac.LastDrawnDirection;
+            bool rightAlign = dir == LeaderDirection.NE || dir == LeaderDirection.E
+                || dir == LeaderDirection.SE || dir == LeaderDirection.S;
+            float leftX = rightAlign
+                ? db.LocationF.X + db.SizeF.Width - (redW + yelW)
+                : db.LocationF.X;
+            // Only CA/LA blink (hidden on phase 1); SPCs and yellow tags stay solid.
+            bool hideRed = ac.RedAlertBlinks && ClockPhase.Phase == 1;
+            if (hasRed && !hideRed)
+            {
+                ac.AlertLabelRed.LocationF = new PointF(leftX, top);
+                DrawLabel(ac.AlertLabelRed);
+            }
+            if (hasYellow)
+            {
+                ac.AlertLabelYellow.LocationF = new PointF(leftX + redW, top);
+                DrawLabel(ac.AlertLabelYellow);
             }
         }
         private void DrawLabel(TransparentLabel Label)

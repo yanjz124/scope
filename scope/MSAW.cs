@@ -76,6 +76,9 @@ namespace DGScope
             // MSAW inhibited (automatic VFR inhibit or manual F7 V/Q <slew>).
             if (ac.IsMSAWInhibited)
                 return false;
+            // MSAW only applies to correlated (associated) tracks.
+            if (!ac.Associated)
+                return false;
             // Aircraft on the airport surface do not generate MSAW.
             if (ac.IsOnGround)
                 return false;

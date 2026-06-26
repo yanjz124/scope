@@ -115,6 +115,70 @@ namespace DGScope
         public bool ConflictAlert { get; set; }
         public bool ConflictAlertAcknowledged { get; set; }
         public List<Aircraft> ConflictingTracks { get; } = new List<Aircraft>();
+
+        // ---- Special Purpose Codes (SPC) and alert tags ----
+        // Squawk-derived SPCs are red and sound the SpecialCode tone until acknowledged.
+        // Manually-assigned tags (type code + slew) are silent: red HJ/RF/EM/MI/LL or
+        // yellow OD/ME/MF/LN. CA/LA come from the alert engines (red, blinking).
+        public List<string> ManualAlertCodes { get; } = new List<string>();
+        public bool SpcAcknowledged { get; set; }
+        public static readonly string[] AssignableSPCs = { "HJ", "RF", "EM", "MI", "LL", "OD", "ME", "MF", "LN" };
+        private static readonly HashSet<string> RedAlertCodes = new HashSet<string> { "CA", "LA", "HJ", "RF", "EM", "MI", "LL" };
+        private static readonly HashSet<string> YellowAlertCodes = new HashSet<string> { "OD", "ME", "MF", "LN" };
+        public static bool IsRedAlertCode(string code) => RedAlertCodes.Contains(code);
+        public static bool IsYellowAlertCode(string code) => YellowAlertCodes.Contains(code);
+
+        // The SPC implied by the actual beacon code, or null. Only these sound.
+        public string SquawkSPC
+        {
+            get
+            {
+                switch (Squawk)
+                {
+                    case "7500": return "HJ"; // hijack
+                    case "7600": return "RF"; // radio failure
+                    case "7700": return "EM"; // emergency
+                    case "7777": return "MI"; // military intercept
+                    case "7400": return "LL"; // lost link
+                    default: return null;
+                }
+            }
+        }
+
+        // Active codes kept in activation order ("whichever comes first"), split by color.
+        public List<string> ActiveRedCodes { get; } = new List<string>();
+        public List<string> ActiveYellowCodes { get; } = new List<string>();
+        public void UpdateAlertCodes()
+        {
+            // Reset the SPC acknowledgement once the beacon code is no longer an SPC,
+            // so a subsequent SPC sounds again.
+            if (SquawkSPC == null)
+                SpcAcknowledged = false;
+            var red = new List<string>();
+            if (ConflictAlert) red.Add("CA");
+            if (LowAltitude) red.Add("LA");
+            var sq = SquawkSPC;
+            if (sq != null && !red.Contains(sq)) red.Add(sq);
+            foreach (var c in ManualAlertCodes)
+                if (RedAlertCodes.Contains(c) && !red.Contains(c)) red.Add(c);
+            var yellow = new List<string>();
+            foreach (var c in ManualAlertCodes)
+                if (YellowAlertCodes.Contains(c) && !yellow.Contains(c)) yellow.Add(c);
+            SyncOrdered(ActiveRedCodes, red);
+            SyncOrdered(ActiveYellowCodes, yellow);
+        }
+        private static void SyncOrdered(List<string> current, List<string> active)
+        {
+            current.RemoveAll(c => !active.Contains(c));
+            foreach (var c in active)
+                if (!current.Contains(c)) current.Add(c);
+        }
+        public bool HasAnyAlertCode => ActiveRedCodes.Count > 0 || ActiveYellowCodes.Count > 0;
+        // Only CA/LA blink (until acknowledged); SPCs and manual tags are solid.
+        public bool RedAlertBlinks => (ConflictAlert && !ConflictAlertAcknowledged) || (LowAltitude && !LowAltitudeAcknowledged);
+        // The squawk-derived SPC sounds until the track is slewed to acknowledge.
+        public bool HasUnacknowledgedSpc => SquawkSPC != null && !SpcAcknowledged;
+
         public DateTime LastMessageTime { get; set; }
         public DateTime LastPositionTime { get { return lastLocationSetTime; } }
         public Color TargetColor { get { return TargetReturn.ForeColor; } set { TargetReturn.ForeColor = value; } }
@@ -314,6 +378,19 @@ namespace DGScope
         };
         public TransparentLabel DataBlock3 = new TransparentLabel()
         {
+            AutoSize = true
+        };
+
+        // Alert/SPC line shown above the first data-block line. Two labels because a
+        // single line mixes red (CA/LA/HJ/RF/EM/MI/LL) and yellow (OD/ME/MF/LN) codes.
+        public TransparentLabel AlertLabelRed = new TransparentLabel()
+        {
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true
+        };
+        public TransparentLabel AlertLabelYellow = new TransparentLabel()
+        {
+            TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = true
         };
 
@@ -653,32 +730,9 @@ namespace DGScope
                 }
             }
 
-            // Alert indicators time-share with the ACID on the first line of the FDB
-            // (phases 0/2 show the indicator, phase 1 keeps the ACID, so it blinks).
-            if ((LowAltitude || ConflictAlert) && FDB)
-            {
-                bool leftJust = leaderDirection == LeaderDirection.W ||
-                    leaderDirection == LeaderDirection.NW ||
-                    leaderDirection == LeaderDirection.SW;
-                // MSAW (LA): time-shares with the ACID for as long as the alert is
-                // active; per vSTARS, acknowledging only silences the tone.
-                if (LowAltitude)
-                {
-                    string la = leftJust ? "LA".PadLeft(9) : "LA".PadRight(9);
-                    SetFirstLine(DataBlock, la);
-                    SetFirstLine(DataBlock3, la);
-                }
-                // Conflict Alert (CA) takes precedence: per CRC STARS, "CA" blinks red
-                // until acknowledged, then displays solid red.
-                if (ConflictAlert)
-                {
-                    string ca = leftJust ? "CA".PadLeft(9) : "CA".PadRight(9);
-                    SetFirstLine(DataBlock, ca);
-                    SetFirstLine(DataBlock3, ca);
-                    if (ConflictAlertAcknowledged)
-                        SetFirstLine(DataBlock2, ca);
-                }
-            }
+            // Alert/SPC codes (CA/LA/HJ/RF/EM/MI/LL/OD/ME/MF/LN) are rendered on a
+            // separate line above the data block (see RadarWindow alert-label drawing),
+            // not inside the data block text.
 
             if (!string.IsNullOrEmpty(PositionInd))
                 PositionIndicator.Text = PositionInd.Substring(PositionInd.Length - 1);
@@ -690,18 +744,6 @@ namespace DGScope
                 PositionIndicator.Text = "◇";
             else
                 PositionIndicator.Text = "*";
-        }
-
-        private static void SetFirstLine(TransparentLabel label, string firstLine)
-        {
-            var parts = label.Text.Split(new[] { "\r\n" }, StringSplitOptions.None);
-            if (parts.Length <= 1)
-            {
-                label.Text = firstLine;
-                return;
-            }
-            parts[0] = firstLine;
-            label.Text = string.Join("\r\n", parts);
         }
 
         private List<string> selectedSquawks;
