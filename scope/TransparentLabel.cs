@@ -148,6 +148,42 @@ namespace DGScope
         {
             this.Redraw = true;
         }
+        /// <summary>
+        /// Measures the current Text/Font and sets Size and SizeF immediately (without
+        /// rendering), so callers can position the label the same frame the text changes.
+        /// Returns the scaled SizeF.
+        /// </summary>
+        public SizeF Measure(float pixelScale)
+        {
+            if (string.IsNullOrEmpty(this.Text))
+            {
+                this.Size = new Size(0, 0);
+                SizeF = new SizeF(0, 0);
+                return SizeF;
+            }
+            if (!dpiCached)
+            {
+                using (Graphics g = CreateGraphics())
+                {
+                    cachedScreenDpiX = g.DpiX;
+                    cachedScreenDpiY = g.DpiY;
+                }
+                dpiCached = true;
+            }
+            SizeF size;
+            using (var measureBmp = new Bitmap(1, 1))
+            {
+                measureBmp.SetResolution(cachedScreenDpiX, cachedScreenDpiY);
+                using (Graphics graphics = Graphics.FromImage(measureBmp))
+                    size = graphics.MeasureString(this.Text, this.Font, PointF.Empty, CachedStringFormat);
+            }
+            int w = (int)(size.Width + this.Padding.Left + this.Padding.Right + 1);
+            int h = (int)(size.Height + this.Padding.Top + this.Padding.Bottom + 1);
+            this.Size = new Size(w, h);
+            SizeF = new SizeF(w * pixelScale, h * pixelScale);
+            return SizeF;
+        }
+
         public Bitmap NewTextBitmap(bool outline = false)
         {
             if (!Redraw)

@@ -409,6 +409,9 @@ namespace DGScope
 
         private int dbAlt, dbSpeed = 0;
         public LeaderDirection LastDrawnDirection;
+        // True when the data block is right-justified (leader W/NW/SW); the alert line
+        // matches this so it stays anchored to the data block's shifted edge.
+        public bool LastDataBlockRightJustified;
 
         public void RedrawDataBlock(Radar radar, LeaderDirection? leaderDirection = null)
         {
@@ -430,6 +433,11 @@ namespace DGScope
             {
                 LastDrawnDirection = leaderDirection.Value;
             }
+            // The data block is right-justified (PadLeft) for W/NW/SW, left-justified
+            // otherwise. The alert line aligns to match, so capture it here.
+            LastDataBlockRightJustified = leaderDirection == LeaderDirection.W
+                || leaderDirection == LeaderDirection.NW
+                || leaderDirection == LeaderDirection.SW;
             string oldtext = DataBlock.Text;
             string oldtext2 = DataBlock2.Text;
             string oldtext3 = DataBlock3.Text;

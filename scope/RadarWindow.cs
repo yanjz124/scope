@@ -3171,6 +3171,11 @@ namespace DGScope
             var oldtext = StatusArea.Text;
             var timesyncind = timesync.Synchronized ? " " : "*";
             StatusArea.Text = CurrentTime.ToString("HHmm/ss") + timesyncind + wx.Altimeter.Value.ToString("00.00") + "\r\n";
+            // Reserve a blank line below the clock for the SPC code line (drawn as
+            // separate red/yellow labels in RenderSSAAlertCodes) so it doesn't overlap.
+            GetActiveSpcCodes(out var ssaSpcRed, out var ssaSpcYellow);
+            if (ssaSpcRed.Length > 0 || ssaSpcYellow.Length > 0)
+                StatusArea.Text += "\r\n";
             for (int i = 0; i < 10; i++)
             {
                 if (atises[i] != null)
@@ -5348,7 +5353,7 @@ namespace DGScope
             RenderLACAMCIList();
             RenderSSAAlertCodes();
         }
-        private void RenderSSAAlertCodes()
+        private void GetActiveSpcCodes(out string[] red, out string[] yellow)
         {
             List<Aircraft> acs;
             lock (Aircraft)
@@ -5356,8 +5361,12 @@ namespace DGScope
             // SPC codes active anywhere in the system (CA/LA live in the LA/CA/MCI list).
             string[] redOrder = { "HJ", "RF", "EM", "LL", "MI" };
             string[] yellowOrder = { "OD", "ME", "MF", "LN" };
-            var red = redOrder.Where(c => acs.Any(a => a.ActiveRedCodes.Contains(c))).ToArray();
-            var yellow = yellowOrder.Where(c => acs.Any(a => a.ActiveYellowCodes.Contains(c))).ToArray();
+            red = redOrder.Where(c => acs.Any(a => a.ActiveRedCodes.Contains(c))).ToArray();
+            yellow = yellowOrder.Where(c => acs.Any(a => a.ActiveYellowCodes.Contains(c))).ToArray();
+        }
+        private void RenderSSAAlertCodes()
+        {
+            GetActiveSpcCodes(out var red, out var yellow);
             if (red.Length == 0 && yellow.Length == 0)
                 return;
             string redText = string.Join(" ", red);
@@ -5370,8 +5379,12 @@ namespace DGScope
             SSAAlertYellow.Text = yellowText;
             SSAAlertRed.ForeColor = AdjustedColor(DataBlockEmergencyColor, CurrentPrefSet.Brightness.Lists);
             SSAAlertYellow.ForeColor = AdjustedColor(Color.Yellow, CurrentPrefSet.Brightness.Lists);
-            // One line directly above the Status Area block.
-            float y = StatusLocation.Y;
+            // Size now so placement is correct the same frame.
+            SSAAlertRed.Measure(pixelScale);
+            SSAAlertYellow.Measure(pixelScale);
+            // The line directly below the clock (the reserved blank line in RenderStatus).
+            float lineHeight = Math.Max(SSAAlertRed.SizeF.Height, SSAAlertYellow.SizeF.Height);
+            float y = StatusLocation.Y - (2 * lineHeight);
             if (!string.IsNullOrEmpty(redText))
             {
                 SSAAlertRed.LocationF = new PointF(StatusLocation.X, y);
@@ -5856,12 +5869,18 @@ namespace DGScope
                 string yellowText = string.Join("/", aircraft.ActiveYellowCodes);
                 if (!string.IsNullOrEmpty(redText) && !string.IsNullOrEmpty(yellowText))
                     redText += "/"; // connect the two colored segments
+                aircraft.AlertLabelRed.Font = Font;
+                aircraft.AlertLabelYellow.Font = Font;
                 aircraft.AlertLabelRed.Text = redText;
                 aircraft.AlertLabelYellow.Text = yellowText;
                 aircraft.AlertLabelRed.ForeColor = DataBlockEmergencyColor;
                 aircraft.AlertLabelYellow.ForeColor = Color.Yellow;
                 aircraft.AlertLabelRed.ParentAircraft = aircraft;
                 aircraft.AlertLabelYellow.ParentAircraft = aircraft;
+                // Size them now (same frame the text changes) so right-alignment doesn't
+                // lag a frame when codes are added/removed or the block is repositioned.
+                aircraft.AlertLabelRed.Measure(pixelScale);
+                aircraft.AlertLabelYellow.Measure(pixelScale);
                 if (!dataBlocks.Contains(aircraft.DataBlock))
                 {
                     lock (dataBlocks)
@@ -6707,11 +6726,15 @@ namespace DGScope
             float yelW = ac.AlertLabelYellow.SizeF.Width;
             // Sits directly above the first data-block line (LocationF is bottom-left).
             float top = db.LocationF.Y + db.SizeF.Height;
-            var dir = ac.LastDrawnDirection;
-            bool rightAlign = dir == LeaderDirection.NE || dir == LeaderDirection.E
-                || dir == LeaderDirection.SE || dir == LeaderDirection.S;
+            // Match the data block's justification so the alert stays on the shifted edge.
+            // For W/NW/SW the block is positioned using the widest of the three cycling
+            // blocks (see OffsetDatablockLocation), so the true right edge is LocationF.X +
+            // max width — not just the phase-0 DataBlock's width.
+            bool rightAlign = ac.LastDataBlockRightJustified;
+            float blockWidth = Math.Max(ac.DataBlock.SizeF.Width,
+                Math.Max(ac.DataBlock2.SizeF.Width, ac.DataBlock3.SizeF.Width));
             float leftX = rightAlign
-                ? db.LocationF.X + db.SizeF.Width - (redW + yelW)
+                ? db.LocationF.X + blockWidth - (redW + yelW)
                 : db.LocationF.X;
             // Only CA/LA blink (hidden on phase 1); SPCs and yellow tags stay solid.
             bool hideRed = ac.RedAlertBlinks && ClockPhase.Phase == 1;
