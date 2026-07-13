@@ -15,6 +15,9 @@ namespace DGScope
         public double Latitude => Location.Latitude;
         public double Longitude => Location.Longitude;
         public string Callsign { get; set; }
+        // Callsign supplied by the ADS-B Beacon Reader plugin. Kept separate from Callsign
+        // because SWIM continuously overwrites Callsign; the render loop re-applies this.
+        public string ADSBCallsign { get; set; }
         public bool Deleted { get; set; } = false;
         public bool ShowPTL { get; set; } = false;
         public bool Pointout { get; set; } = false;

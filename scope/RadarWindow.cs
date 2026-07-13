@@ -18,7 +18,6 @@ using System.Windows.Forms.Design;
 using System.Threading.Tasks;
 using System.Collections.ObjectModel;
 using DGScope.STARS;
-using DGScope.ADSBBeaconReader;
 using Vector4 = OpenTK.Vector4;
 using System.Xml;
 using System.Diagnostics;
@@ -785,10 +784,6 @@ namespace DGScope
         public bool WindInStatusArea { get; set; } = false;
         [DisplayName("FPS in Status Area"), Description("Show FPS in Status Area"), Category("Display Properties")]
         public bool FPSInStatusArea { get; set; } = false;
-        [DisplayName("ADS-B Beacon Reader"), Description("Settings for the ADS-B beacon reader service"), Category("Display Properties")]
-        public ADSBBeaconReaderSettings ADSBSettings { get; set; } = new ADSBBeaconReaderSettings();
-        [XmlIgnore]
-        private ADSBBeaconReaderService adsbService;
         [DisplayName("Use ADS-B Callsigns Unassociated"), Description("Use the ADS-B Callsign for unassociated tracks"), Category("Display Properties")]
         public bool UseADSBCallsigns { get; set; } = false;
         [DisplayName("Use ADS-B Callsigns Unassociated 1200"), Description("Use the ADS-B Callsign for unassociated tracks squawking 1200"), Category("Display Properties")]
@@ -1310,41 +1305,14 @@ namespace DGScope
                             System.Windows.Forms.MessageBoxIcon.Warning);
                     }
             }
-            StartADSBService();
         }
 
         public void StopReceivers()
         {
             foreach (Receiver receiver in Receivers)
                 receiver.Stop();
-            StopADSBService();
         }
 
-        private void StartADSBService()
-        {
-            ADSBSettings.EnsureBuiltInSources();
-            if (ADSBSettings.AnyEnabled)
-            {
-                adsbService = new ADSBBeaconReaderService(
-                    Aircraft,
-                    () => HomeLocation,
-                    () => CurrentPrefSet.Range,
-                    ADSBSettings);
-                adsbService.Start();
-            }
-        }
-
-        private void StopADSBService()
-        {
-            adsbService?.Stop();
-            adsbService = null;
-        }
-
-        private void RestartADSBService()
-        {
-            StopADSBService();
-            StartADSBService();
-        }
         private void OrderWaypoints()
         {
             Waypoints = Waypoints.ToList().OrderBy(x => x.Location.DistanceTo(HomeLocation)).ToList();
@@ -3616,14 +3584,6 @@ namespace DGScope
                         Preview.Clear();
                         Preview.Add(KeyCode.RngRing);
                         break;
-                    case Key.B:
-                        ADSBSettings.EnsureBuiltInSources();
-                        var adsbForm = new ADSBBeaconReaderForm(ADSBSettings, adsbService);
-                        adsbForm.Show();
-                        adsbForm.BringToFront();
-                        adsbForm.Focus();
-                        adsbForm.FormClosed += (s, args) => RestartADSBService();
-                        break;
                 }
             }
             else if (e.Alt)
@@ -4354,12 +4314,23 @@ namespace DGScope
             GL.Flush();
             window.SwapBuffers();
             fps = (int)(1f / e.Time);
-            if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200 || adsbService != null)
+            if (UseADSBCallsigns || UseADSBCallsignsAssociated || UseADSBCallsigns1200)
             {
                 lock(Aircraft)
                 {
                     foreach (var ac in Aircraft)
                         ADSBtoFlightPlanCallsign(ac);
+                }
+            }
+            else
+            {
+                // Even with no UseADSB* display option active, re-apply callsigns the
+                // ADS-B Beacon Reader plugin supplied (SWIM keeps resetting Callsign).
+                lock(Aircraft)
+                {
+                    foreach (var ac in Aircraft)
+                        if (!string.IsNullOrEmpty(ac.ADSBCallsign))
+                            ADSBtoFlightPlanCallsign(ac);
                 }
             }
             oldar = aspect_ratio;
@@ -6024,31 +5995,22 @@ namespace DGScope
         }
         private async Task ADSBtoFlightPlanCallsign(Aircraft aircraft)
         {
-            // LADD backfill: SWIM sets Callsign=Squawk for LADD correlated tracks.
-            // Re-apply cached ADSB callsign every frame since SWIM continuously overwrites.
-            if (adsbService != null && !ADSBSettings.HideLADDCallsigns)
+            // The ADS-B Beacon Reader plugin writes matched callsigns to ADSBCallsign,
+            // which SWIM never overwrites. Re-apply it every frame since SWIM continuously
+            // resets Callsign back to the squawk for correlated tracks. (LADD suppression
+            // is handled in the plugin: it simply never populates ADSBCallsign for LADD.)
+            if (!string.IsNullOrWhiteSpace(aircraft.ADSBCallsign))
             {
-                var cached = adsbService.GetCachedCallsign(aircraft);
-                if (cached != null)
-                {
-                    aircraft.Callsign = cached;
-                    aircraft.FlightPlanCallsign = cached;
-                    return;
-                }
+                aircraft.Callsign = aircraft.ADSBCallsign;
+                aircraft.FlightPlanCallsign = aircraft.ADSBCallsign;
+                return;
             }
 
             if (string.IsNullOrWhiteSpace(aircraft.FlightPlanCallsign) && !string.IsNullOrWhiteSpace(aircraft.Callsign))
             {
                 var associated = aircraft.Associated;
 
-                // If ADSB service is running and Callsign is a real callsign (not squawk),
-                // always fill FlightPlanCallsign — SWIM sometimes leaves FPC empty for
-                // correlated tracks even when Callsign is set.
-                if (adsbService != null && aircraft.Callsign != aircraft.Squawk)
-                {
-                    aircraft.FlightPlanCallsign = aircraft.Callsign;
-                }
-                else if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
+                if (UseADSBCallsigns && !associated && aircraft.Squawk != null && aircraft.Squawk != "1200")
                 {
                     aircraft.FlightPlanCallsign = aircraft.Callsign;
                 }

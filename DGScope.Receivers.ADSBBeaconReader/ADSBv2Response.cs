@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using System.Collections.Generic;
 
-namespace DGScope.ADSBBeaconReader
+namespace DGScope.Receivers
 {
     public class ADSBv2Response
     {
@@ -53,6 +53,6 @@ namespace DGScope.ADSBBeaconReader
         [JsonProperty("dbFlags")]
         public int? DbFlags { get; set; }
 
-        public bool IsLADD => DbFlags.HasValue && (DbFlags.Value & 8) != 0;
+        public bool IsLADD => (DbFlags & 8) != 0;
     }
 }
