@@ -616,7 +616,7 @@ namespace DGScope
         private Radar radar;
         public static ObservableCollection<Aircraft> Aircraft = new ObservableCollection<Aircraft>();
         [Editor(typeof(ReceiverCollectionEditor), typeof(UITypeEditor))]
-        [DisplayName("Receivers"), Description("The collection of data receivers for the Radar scope")]
+        [DisplayName("Receivers"), Category("Data Sources"), Description("The collection of data receivers for the Radar scope")]
         public ListOfIReceiver Receivers { get; set; } = new ListOfIReceiver();
         private GeoPoint _homeLocation = new GeoPoint(0, 0);
         [DisplayName("Facility Center")]

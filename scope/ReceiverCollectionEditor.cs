@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 
 namespace DGScope.Receivers
@@ -17,17 +18,36 @@ namespace DGScope.Receivers
 
         private void LoadReceivers()
         {
-            DirectoryInfo dir = new DirectoryInfo(Environment.CurrentDirectory);
-            FileInfo[] dlls = dir.GetFiles("DGScope.*.dll");
-            foreach (var dll in dlls)
+            // Look beside the executable, not in the working directory. The facility
+            // config is chosen through an OpenFileDialog, which leaves the process
+            // working directory pointing at the profile folder - where there are no
+            // plugins - so scanning it left the "Add" list empty and no receiver could
+            // be added at all.
+            string dir = AppDomain.CurrentDomain.BaseDirectory;
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                dir = Environment.CurrentDirectory;
+
+            foreach (var dll in new DirectoryInfo(dir).GetFiles("DGScope.*.dll"))
             {
-                Assembly assembly = Assembly.LoadFrom(dll.FullName);
-                foreach (Type type in assembly.GetTypes())
+                Type[] assemblyTypes;
+                try
                 {
-                    if (typeof(Receiver).IsAssignableFrom(type))
-                    {
+                    assemblyTypes = Assembly.LoadFrom(dll.FullName).GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    // Keep whatever did load; one broken plugin must not hide the rest.
+                    assemblyTypes = ex.Types.Where(t => t != null).ToArray();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (Type type in assemblyTypes)
+                {
+                    if (typeof(Receiver).IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface)
                         types.Add(type);
-                    }
                 }
             }
         }

@@ -23,6 +23,9 @@ namespace DGScope
                     open.Filter = "Facility Config File (*.xml)|*.xml|All files (*.*)|*.*";
                     open.FilterIndex = 1;
                     open.CheckFileExists = true;
+                    // Every other dialog in the app does this. Without it, picking a
+                    // config leaves the working directory in the profile folder.
+                    open.RestoreDirectory = true;
                     if (open.ShowDialog() == DialogResult.OK)
                     {
                         facilityConfig = open.FileName;
