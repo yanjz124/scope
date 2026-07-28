@@ -53,6 +53,9 @@ namespace DGScope.Receivers
         [JsonProperty("dbFlags")]
         public int? DbFlags { get; set; }
 
-        public bool IsLADD => (DbFlags & 8) != 0;
+        // Note the HasValue guard: without it the lifted `null != 0` comparison
+        // evaluates to true, so every aircraft the feed omits dbFlags for would be
+        // treated as LADD and silently skipped.
+        public bool IsLADD => DbFlags.HasValue && (DbFlags.Value & 8) != 0;
     }
 }

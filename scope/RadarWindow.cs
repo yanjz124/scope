@@ -1291,6 +1291,12 @@ namespace DGScope
         {
             foreach (Receiver receiver in Receivers)
             {
+                // A receiver left at 0/0 queries the middle of the ocean and quietly
+                // returns nothing, so fall back to the scope's own position. Anything
+                // the user has actually set is left alone.
+                if (receiver.Location == null || (receiver.Location.Latitude == 0 && receiver.Location.Longitude == 0))
+                    receiver.Location = HomeLocation;
+
                 receiver.SetAircraftList(Aircraft);
                 receiver.SetWeatherRadarDisplay(Nexrad);
                 if (receiver.Enabled)

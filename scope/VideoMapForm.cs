@@ -287,8 +287,18 @@ namespace DGScope
                     var filePath = openFileDialog.FileName;
 
                     //Read the contents of the file into a stream
-                    var newmaps = GeoJSONMapExporter.GeoJSONFileToMaps(filePath);
+                    var report = new MapLoadReport();
+                    var newmaps = GeoJSONMapExporter.GeoJSONFileToMaps(filePath, report);
                     maps.AddRange(newmaps);
+                    if (newmaps.Count == 0 || report.HasProblems)
+                    {
+                        var summary = report.Summary();
+                        if (newmaps.Count == 0)
+                            summary = "No drawable lines were found in this file." +
+                                (string.IsNullOrWhiteSpace(summary) ? "" : "\r\n\r\n" + summary);
+                        MessageBox.Show(summary, "Import GeoJSON",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                 }
             }
             changed = true;

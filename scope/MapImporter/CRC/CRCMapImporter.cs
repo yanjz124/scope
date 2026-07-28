@@ -56,36 +56,74 @@ namespace DGScope.MapImporter.CRC
             }
             var importmapids = importfacility.starsConfiguration.videoMapIds.ToList();
             List<VideoMap> maps = new List<VideoMap>();
+            var report = new MapLoadReport();
+            var skipped = new List<string>();
+
             foreach (var importmapid in importmapids)
             {
                 Videomap importmap = artcc.videoMaps.Where(x => x.id == importmapid).FirstOrDefault();
                 if (importmap == null)
-                { 
-                    continue; 
+                {
+                    continue;
                 }
                 if (importmap.starsId.HasValue)
                 {
-                    VideoMap map = new VideoMap();
-                    var mappath = mapdirectory + importmap.id + ".geojson";
                     var name = importmap.name;
-                    var mnemonic = importmap.shortName;
-                    var importmapobj = GeoJSONMapExporter.GeoJSONFileToMaps(mappath);
-                    if (importmapobj == null)
+                    try
                     {
-                        System.Windows.Forms.MessageBox.Show("Did not import map: " + name);
-                        continue;
+                        VideoMap map = new VideoMap();
+                        var mappath = mapdirectory + importmap.id + ".geojson";
+                        var mnemonic = importmap.shortName;
+                        var importmapobj = GeoJSONMapExporter.GeoJSONFileToMaps(mappath, report);
+
+                        // Take every map the file produced, not just the first. Files that
+                        // fall back to lenient parsing can split across several maps, and
+                        // keeping only the first silently dropped most of the drawing.
+                        foreach (var loaded in importmapobj)
+                            map.Lines.AddRange(loaded.Lines);
+
+                        if (map.Lines.Count == 0)
+                            skipped.Add(name);
+
+                        map.Name = name;
+                        map.Mnemonic = mnemonic;
+                        map.Category = importmap.starsBrightnessCategory == "A" ? MapCategory.A : MapCategory.B;
+                        map.Number = importmap.starsId.Value;
+                        maps.Add(map);
                     }
-                    if (importmapobj.Any())
+                    catch (Exception ex)
                     {
-                        map.Lines = importmapobj.First().Lines; 
+                        // One unreadable map must not abandon the rest of the facility.
+                        skipped.Add(name);
+                        report.Error(name + ": " + ex.Message);
                     }
-                    map.Name = name;
-                    map.Mnemonic = mnemonic;
-                    map.Category = importmap.starsBrightnessCategory == "A" ? MapCategory.A : MapCategory.B;
-                    map.Number = importmap.starsId.Value;
-                    maps.Add(map);
                 }
             }
+
+            // One summary at the end, rather than a modal dialog per failed map.
+            if (skipped.Count > 0 || report.Errors.Count > 0)
+            {
+                var message = new StringBuilder();
+                message.AppendLine($"Imported {maps.Count} map(s).");
+                if (skipped.Count > 0)
+                {
+                    message.AppendLine();
+                    message.AppendLine($"{skipped.Count} map(s) contained no drawable lines:");
+                    foreach (var name in skipped.Take(15))
+                        message.AppendLine("  " + name);
+                    if (skipped.Count > 15)
+                        message.AppendLine($"  ...and {skipped.Count - 15} more.");
+                }
+                var summary = report.Summary();
+                if (!string.IsNullOrWhiteSpace(summary))
+                {
+                    message.AppendLine();
+                    message.AppendLine(summary);
+                }
+                System.Windows.Forms.MessageBox.Show(message.ToString(), "CRC map import",
+                    System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+            }
+
             return maps;
         }
     }
