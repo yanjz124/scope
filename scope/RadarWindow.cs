@@ -1287,8 +1287,19 @@ namespace DGScope
                 });
             }
         }
+        /// <summary>
+        /// Attaches the aircraft list to every receiver and starts the enabled ones.
+        /// Safe to call again after the property grid closes, which is how a receiver
+        /// added while the scope is running gets a location, an aircraft list and a
+        /// start without needing a restart.
+        /// </summary>
         public void StartReceivers()
         {
+            // Provide the receivers the scope ships with, so they don't have to be added
+            // by hand. An entry that already exists is left untouched, including one the
+            // user has disabled.
+            ReceiverPlugins.EnsureDefaults(Receivers);
+
             foreach (Receiver receiver in Receivers)
             {
                 // A receiver left at 0/0 queries the middle of the ocean and quietly
@@ -3554,6 +3565,10 @@ namespace DGScope
                         break;
                     case Key.P:
                         PropertyForm properties = new PropertyForm(this);
+                        // Pick up anything added or re-enabled in the grid. Without this a
+                        // receiver added here never receives the aircraft list, so it can
+                        // never start and only appears to work after a restart.
+                        properties.FormClosed += (s, args) => StartReceivers();
                         properties.Show();
                         break;
                     case Key.Q:

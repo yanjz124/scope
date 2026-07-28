@@ -294,6 +294,7 @@
     <Compile Include="RangeBearingLine.cs" />
     <Compile Include="ReadWriteBuffer.cs" />
     <Compile Include="ReceiverCollectionEditor.cs" />
+    <Compile Include="ReceiverPlugins.cs" />
     <Compile Include="Receivers.cs" />
     <Compile Include="RuntimeServiceProvider.cs" />
     <Compile Include="TransparentLabel.cs">

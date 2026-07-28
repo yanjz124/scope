@@ -10,13 +10,14 @@ using System.Threading;
 
 namespace DGScope.Receivers
 {
+    [DefaultReceiver]
     public class ADSBBeaconReaderReceiver : Receiver
     {
         [DisplayName("Poll Interval (s)"), Description("Seconds between polls of each ADS-B source (minimum 3).")]
         public int PollIntervalSeconds { get; set; } = 5;
 
-        [DisplayName("Hide LADD Callsigns"), Description("Suppress callsigns for aircraft flagged LADD (Limiting Aircraft Data Displayed), for FAA SWIM compliance.")]
-        public bool HideLADDCallsigns { get; set; } = true;
+        [DisplayName("Hide LADD Callsigns"), Description("Suppress callsigns for aircraft flagged LADD (Limiting Aircraft Data Displayed). The configured sources publish these unfiltered; turn this on to withhold them anyway.")]
+        public bool HideLADDCallsigns { get; set; } = false;
 
         [DisplayName("Correlate By Position"), Description("Match ADS-B targets to radar tracks by position and altitude when the Mode S code and beacon code don't identify them. Required for most SWIM feeds, which don't publish Mode S codes.")]
         public bool CorrelateByPosition { get; set; } = true;
@@ -40,6 +41,8 @@ namespace DGScope.Receivers
         private Timer pollTimer;
         private volatile bool running;
         private int pollCount;
+        private bool warnedNoAircraftList;
+        private bool warnedNoLocation;
 
         /// <summary>
         /// Position-correlated assignments, kept so they can be re-validated and
@@ -208,10 +211,30 @@ namespace DGScope.Receivers
 
             try
             {
-                if (aircraft == null || !HasUsableLocation)
+                if (aircraft == null)
+                {
+                    // Only possible if the scope never handed over its track list. Log it
+                    // once: silence here is indistinguishable from "no traffic matched".
+                    if (!warnedNoAircraftList)
+                    {
+                        warnedNoAircraftList = true;
+                        Log("Poll skipped: no track list attached yet.");
+                    }
                     return;
+                }
+                if (!HasUsableLocation)
+                {
+                    if (!warnedNoLocation)
+                    {
+                        warnedNoLocation = true;
+                        Log("Poll skipped: Location is 0,0 - set it on the receiver.");
+                    }
+                    return;
+                }
 
                 var enabledSources = Sources.Where(s => s.Enabled).ToList();
+                if (pollCount == 0)
+                    Log($"Polling {enabledSources.Count} source(s)...");
                 var allResults = new List<ADSBv2Aircraft>();
 
                 for (int i = 0; i < enabledSources.Count; i++)
@@ -255,11 +278,27 @@ namespace DGScope.Receivers
             }
         }
 
+        /// <summary>
+        /// WebClient waits 100 seconds by default. With three sources polled in sequence
+        /// that is five minutes of silence before a single unreachable host reports
+        /// anything, which reads exactly like the receiver doing nothing at all.
+        /// </summary>
+        private class TimeoutWebClient : WebClient
+        {
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                var request = base.GetWebRequest(address);
+                if (request != null)
+                    request.Timeout = 15000;
+                return request;
+            }
+        }
+
         private List<ADSBv2Aircraft> QuerySource(ADSBSource source)
         {
             var url = $"{source.BaseUrl.TrimEnd('/')}/lat/{Location.Latitude:F6}/lon/{Location.Longitude:F6}/dist/{(int)Range}";
 
-            using (var client = new WebClient())
+            using (var client = new TimeoutWebClient())
             {
                 client.Headers.Add("Accept", "application/json");
                 client.Headers.Add("User-Agent", "DGScope-BeaconReader");
