@@ -203,13 +203,23 @@ jobs:
 
         Write-Host "Copying receiver and decoder assemblies into $destination"
 
-        $patterns = @(
-          ".\DGScope.Receivers.*\bin\Release\**\*.dll",
-          ".\NexradDecoder\bin\Release\**\*.dll"
-        )
+        # Resolve each project's bin\Release first, then recurse into it. The previous
+        # ".\DGScope.Receivers.*\bin\Release\**\*.dll" pattern only matched DLLs sitting
+        # directly in bin\Release, so the SDK-style projects - which nest their output
+        # under a target-framework folder (bin\Release\net472, bin\Release\netstandard2.0)
+        # - were silently left out of every release.
+        $projectDirs = @(Get-ChildItem -Path "." -Directory -Filter "DGScope.Receivers.*")
+        $searchRoots = @()
+        foreach ($dir in $projectDirs) {
+          $root = Join-Path $dir.FullName "bin\Release"
+          if (Test-Path $root) { $searchRoots += $root }
+          else { Write-Host "  WARNING: no Release output for $($dir.Name)" }
+        }
+        $nexrad = Join-Path (Resolve-Path ".\NexradDecoder") "bin\Release"
+        if (Test-Path $nexrad) { $searchRoots += $nexrad }
 
-        foreach ($pattern in $patterns) {
-          Get-ChildItem -Path $pattern -File -Recurse -ErrorAction SilentlyContinue |
+        if ($searchRoots.Count -gt 0) {
+          Get-ChildItem -Path $searchRoots -File -Recurse -Filter "*.dll" -ErrorAction SilentlyContinue |
             ForEach-Object {
               $targetPath = Join-Path $destination $_.Name
               if (-not (Test-Path $targetPath)) {
@@ -219,12 +229,19 @@ jobs:
             }
         }
 
-        # Fail early if we did not copy anything
-        $copied = Get-ChildItem $destination -Filter "DGScope.*.dll" -File | Measure-Object
-        if ($copied.Count -eq 0) {
-          Write-Error "No receiver assemblies were copied."
+        # Every receiver project must contribute its assembly. Checking only for a
+        # non-zero total let a release ship with 3 of 7 plugins and still pass.
+        $missing = @()
+        foreach ($dir in $projectDirs) {
+          if (-not (Test-Path (Join-Path $destination "$($dir.Name).dll"))) {
+            $missing += $dir.Name
+          }
+        }
+        if ($missing.Count -gt 0) {
+          Write-Error "Receiver assemblies missing from the release: $($missing -join ', ')"
           exit 1
         }
+        Write-Host "All $($projectDirs.Count) receiver assemblies present."
 
     - name: Create Portable ZIP
       shell: pwsh
